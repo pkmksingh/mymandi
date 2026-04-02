@@ -12,12 +12,17 @@ import db, { initDB } from '../server/db.js';
 import * as nsfwjs from 'nsfwjs';
 import sharp from 'sharp';
 
-let tf;
-try {
-  tf = await import('@tensorflow/tfjs');
-} catch (e) {
-  console.error("TensorFlow load error:", e);
-}
+let tf = null;
+const getTF = async () => {
+  if (tf) return tf;
+  try {
+    tf = await import('@tensorflow/tfjs');
+    return tf;
+  } catch (e) {
+    console.error("TensorFlow load error:", e);
+    return null;
+  }
+};
 
 const app = express();
 
@@ -52,12 +57,12 @@ app.use('/api/users', uploadLimiter);
 app.use('/api/listings', uploadLimiter);
 app.use('/api/signal', uploadLimiter);
 
-// Pusher Configuration
+// Pusher Configuration (Server-side keys mapping)
 const pusher = new Pusher({
   appId: process.env.PUSHER_APP_ID,
-  key: process.env.PUSHER_KEY,
+  key: process.env.VITE_PUSHER_KEY || process.env.PUSHER_KEY,
   secret: process.env.PUSHER_SECRET,
-  cluster: process.env.PUSHER_CLUSTER,
+  cluster: process.env.VITE_PUSHER_CLUSTER || process.env.PUSHER_CLUSTER,
   useTLS: true
 });
 
@@ -93,28 +98,31 @@ const loadModel = async () => {
 };
 
 const checkInappropriate = async (imageUrl) => {
-  const model = await loadModel();
-  if (!model) return false;
-  try {
-    const response = await fetch(imageUrl);
-    const buffer = await response.arrayBuffer();
-    const processedImage = await sharp(Buffer.from(buffer))
-      .resize(224, 224)
-      .removeAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
+    const model = await loadModel();
+    if (!model) return false;
+    const tfInstance = await getTF();
+    if (!tfInstance) return false;
 
-    const image = tf.tensor3d(new Uint8Array(processedImage.data), [224, 224, 3]);
-    const predictions = await model.classify(image);
-    image.dispose();
-    
-    return predictions.some(p => 
-      ['Porn', 'Hentai', 'Sexy'].includes(p.className) && p.probability > 0.6
-    );
-  } catch (err) {
-    console.error("AI Analysis Error:", err);
-    return false;
-  }
+    try {
+      const response = await fetch(imageUrl);
+      const buffer = await response.arrayBuffer();
+      const processedImage = await sharp(Buffer.from(buffer))
+        .resize(224, 224)
+        .removeAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      const image = tfInstance.tensor3d(new Uint8Array(processedImage.data), [224, 224, 3]);
+      const predictions = await model.classify(image);
+      image.dispose();
+      
+      return predictions.some(p => 
+        ['Porn', 'Hentai', 'Sexy'].includes(p.className) && p.probability > 0.6
+      );
+    } catch (err) {
+      console.error("AI Analysis Error:", err);
+      return false;
+    }
 };
 
 // --- API ROUTES ---
