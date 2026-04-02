@@ -134,6 +134,26 @@ export function CallOverlay() {
           }
         };
 
+        peer.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit('ice-candidate', { candidate: event.candidate, to: activeCall.receiverId });
+          }
+        };
+
+        const unsubIce = socket.subscribeUser(currentUser.id, 'ice-candidate', (data) => {
+          if (data.candidate) { 
+            peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.error("ICE error:", e));
+          }
+        });
+
+        const unsubAccepted = socket.subscribeUser(currentUser.id, 'call-accepted', (signal) => {
+          setCallAccepted(true);
+          useStore.setState({ activeCall: { ...activeCall, status: 'connected' } });
+          peer.setRemoteDescription(new RTCSessionDescription(signal.signal));
+        });
+
+        peer.oniceconnectionstatechange = () => console.log("ICE state (Caller):", peer.iceConnectionState);
+
         peer.createOffer().then(offer => {
           peer.setLocalDescription(offer);
           socket.emit('incoming-call', {
@@ -143,24 +163,6 @@ export function CallOverlay() {
             callerName: currentUser.name,
             callerSelfie: currentUser.selfiePath
           });
-        });
-
-        const unsubAccepted = socket.subscribeUser(currentUser.id, 'call-accepted', (signal) => {
-          setCallAccepted(true);
-          useStore.setState({ activeCall: { ...activeCall, status: 'connected' } });
-          peer.setRemoteDescription(new RTCSessionDescription(signal.signal));
-        });
-
-        peer.onicecandidate = (event) => {
-          if (event.candidate) {
-            socket.emit('ice-candidate', { candidate: event.candidate, to: activeCall.receiverId });
-          }
-        };
-
-        const unsubIce = socket.subscribeUser(currentUser.id, 'ice-candidate', (data) => {
-          if (data.candidate && peer.remoteDescription) {
-            peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.error("ICE error:", e));
-          }
         });
 
         connectionRef.current = { 
@@ -214,6 +216,8 @@ export function CallOverlay() {
           peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.error("ICE error:", e));
         }
       });
+
+      peer.oniceconnectionstatechange = () => console.log("ICE state (Receiver):", peer.iceConnectionState);
 
       peer.setRemoteDescription(new RTCSessionDescription(activeCall.signalData)).then(() => {
         peer.createAnswer().then(answer => {
