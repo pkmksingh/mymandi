@@ -18,6 +18,7 @@ export function CallOverlay() {
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
   const connectionRef = useRef(null);
   
   const leaveCall = () => {
@@ -129,6 +130,9 @@ export function CallOverlay() {
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = event.streams[0];
           }
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = event.streams[0];
+          }
         };
 
         peer.createOffer().then(offer => {
@@ -179,6 +183,9 @@ export function CallOverlay() {
       peer.ontrack = (event) => {
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = event.streams[0];
+        }
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = event.streams[0];
         }
       };
 
@@ -307,6 +314,7 @@ export function CallOverlay() {
               autoPlay 
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: videoActive ? 'block' : 'none' }} 
             />
+            <audio ref={remoteAudioRef} autoPlay style={{ display: 'none' }} />
             
             {!videoActive && (peerSelfie ? (
               <img src={peerSelfie} alt="Peer Selfie" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
