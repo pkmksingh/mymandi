@@ -148,6 +148,7 @@ export function CallOverlay() {
 
         const unsubAccepted = socket.subscribeUser(currentUser.id, 'call-accepted', (signal) => {
           setCallAccepted(true);
+          useStore.setState({ activeCall: { ...activeCall, status: 'connected' } });
           peer.setRemoteDescription(new RTCSessionDescription(signal.signal));
         });
 
