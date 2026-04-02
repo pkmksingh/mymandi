@@ -226,7 +226,7 @@ app.patch('/api/listings/:id/sold', async (req, res) => {
   try {
     await initDB();
     const { id } = req.params;
-    await db.query(`UPDATE listings SET status = 'sold' WHERE id = $1`, [id]);
+    await db.query(`UPDATE listings SET "status" = 'sold' WHERE id = $1`, [id]);
     await pusher.trigger('mandi-global', 'listing-updated', { id, status: 'sold' });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: 'Failed' }); }

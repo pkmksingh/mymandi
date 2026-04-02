@@ -83,6 +83,9 @@ export const initDB = async () => {
         FOREIGN KEY ("senderId") REFERENCES users("id") ON DELETE CASCADE,
         FOREIGN KEY ("receiverId") REFERENCES users("id") ON DELETE CASCADE
       );
+
+      -- Migration: Ensure status column exists for old databases
+      ALTER TABLE listings ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'active';
     `);
     console.log("✓ PostgreSQL Database Ready");
   } catch (err) {
