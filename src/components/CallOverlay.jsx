@@ -37,7 +37,7 @@ export function CallOverlay() {
     
     if (activeCall) {
       const peerId = activeCall.callerId === currentUser?.id ? activeCall.receiverId : activeCall.callerId;
-      socket.emit('end-call', { to: peerId });
+      socket.emit('call-ended', { to: peerId });
     }
 
     setStream(null);
@@ -137,9 +137,9 @@ export function CallOverlay() {
 
         peer.createOffer().then(offer => {
           peer.setLocalDescription(offer);
-          socket.emit('call-user', {
+          socket.emit('incoming-call', {
             userToCall: activeCall.receiverId,
-            signalData: offer,
+            signal: offer,
             from: currentUser.id,
             callerName: currentUser.name,
             callerSelfie: currentUser.selfiePath
@@ -148,10 +148,11 @@ export function CallOverlay() {
 
         const unsubAccepted = socket.subscribeUser(currentUser.id, 'call-accepted', (signal) => {
           setCallAccepted(true);
-          peer.setRemoteDescription(new RTCSessionDescription(signal));
+          peer.setRemoteDescription(new RTCSessionDescription(signal.signal));
         });
 
         connectionRef.current = { 
+          peer,
           close: () => {
             peer.close();
             unsubAccepted();
@@ -192,7 +193,7 @@ export function CallOverlay() {
       peer.setRemoteDescription(new RTCSessionDescription(activeCall.signalData)).then(() => {
         peer.createAnswer().then(answer => {
           peer.setLocalDescription(answer);
-          socket.emit('answer-call', { signal: answer, to: activeCall.callerId });
+          socket.emit('call-accepted', { signal: answer, to: activeCall.callerId });
         });
       });
 
@@ -210,20 +211,20 @@ export function CallOverlay() {
   const requestVideo = () => {
     const peerId = activeCall.callerId === currentUser?.id ? activeCall.receiverId : activeCall.callerId;
     setIsRequestingVideo(true);
-    socket.emit('request-video', { to: peerId, from: currentUser.id });
+    socket.emit('video-requested', { to: peerId, from: currentUser.id });
   };
 
   const acceptVideo = () => {
     const peerId = activeCall.callerId === currentUser?.id ? activeCall.receiverId : activeCall.callerId;
     setIncomingVideoRequest(false);
-    socket.emit('accept-video', { to: peerId });
+    socket.emit('video-accepted', { to: peerId });
     enableVideoTrack();
   };
 
   const rejectVideo = () => {
     const peerId = activeCall.callerId === currentUser?.id ? activeCall.receiverId : activeCall.callerId;
     setIncomingVideoRequest(false);
-    socket.emit('reject-video', { to: peerId });
+    socket.emit('video-rejected', { to: peerId });
   };
 
   const enableVideoTrack = async () => {
