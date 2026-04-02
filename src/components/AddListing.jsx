@@ -9,7 +9,7 @@ import { INDIA_DATA } from '../data/india-data';
 const INDIAN_STATES = Object.keys(INDIA_DATA);
 
 export function AddListing() {
-  const { currentUser } = useStore();
+  const { currentUser, language } = useStore();
   const navigate = useNavigate();
 
   const [cropName, setCropName] = useState('');
@@ -46,6 +46,7 @@ export function AddListing() {
     recognition.lang = language === 'hi' ? 'hi-IN' : (language === 'pa' ? 'pa-IN' : 'en-IN');
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       setCropName(transcript);
@@ -178,6 +179,25 @@ export function AddListing() {
       
       <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>List Your Crop</h2>
       <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>Take live photos directly from the app.</p>
+
+      <AnimatePresence>
+        {isListening && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            style={{
+              position: 'fixed', top: '100px', left: '50%', transform: 'translateX(-50%)',
+              background: 'var(--primary-color)', color: 'white', padding: '12px 24px',
+              borderRadius: '30px', zIndex: 100, display: 'flex', alignItems: 'center', gap: '10px',
+              boxShadow: '0 0 30px var(--primary-glow)'
+            }}
+          >
+            <Mic className="animate-pulse" size={20} />
+            <span style={{ fontWeight: 600 }}>Listening...</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {error && (
         <div style={{ background: 'var(--danger-glass)', color: 'var(--danger-color)', padding: '16px', borderRadius: '14px', marginBottom: '20px' }}>

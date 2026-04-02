@@ -6,7 +6,7 @@ import { X, Send, User } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 export function ChatOverlay() {
-  const { activeChatUser, closeChat, currentUser } = useStore();
+  const { activeChatUser, closeChat, currentUser, markChatAsRead } = useStore();
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
@@ -14,23 +14,25 @@ export function ChatOverlay() {
   useEffect(() => {
     if (!activeChatUser || !currentUser) return;
     
-    // Fetch History
+    // Fetch History & Mark Read
     fetch(`/api/messages/history/${currentUser.id}/${activeChatUser.id}`)
       .then(res => res.json())
       .then(data => {
         setMessages(data);
-        return fetch(`/api/messages/read/${activeChatUser.id}/${currentUser.id}`, { method: 'PATCH' });
+        markChatAsRead(activeChatUser.id);
       })
-      .then(() => useStore.getState().fetchUnreadCount())
       .catch(console.error);
 
     const handleReceiveMessage = (msg) => {
-      // Only append if it belongs to this conversation
       if (msg.senderId === activeChatUser.id || msg.receiverId === activeChatUser.id) {
         setMessages(prev => {
           if (prev.some(m => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
+        // Auto-read if chat is open
+        if (msg.senderId === activeChatUser.id) {
+          markChatAsRead(activeChatUser.id);
+        }
       }
     };
 
@@ -57,13 +59,9 @@ export function ChatOverlay() {
       timestamp: Date.now()
     };
 
-    // Optimistically update UI
     setMessages(prev => [...prev, newMsg]);
     setInputText('');
 
-    // Message will be live replayed by backend pusher trigger after POST
-
-    // Save strictly to database
     try {
       await fetch(`/api/messages`, {
         method: 'POST',
@@ -80,10 +78,11 @@ export function ChatOverlay() {
       <div 
         style={{
           position: 'fixed', bottom: 0, right: 0, left: 0, top: 0,
-          background: 'rgba(0,0,0,0.5)', zIndex: 9999,
-          display: 'flex', justifyContent: 'center'
+          background: 'rgba(0,0,0,0.85)', zIndex: 9999,
+          display: 'flex', justifyContent: 'center',
+          backdropFilter: 'none' // Removed blur for maximum performance/opacity
         }}
-        onClick={closeChat} // Close if clicking backdrop
+        onClick={closeChat}
       >
         <motion.div 
           initial={{ opacity: 0, y: 100 }} 
@@ -92,19 +91,19 @@ export function ChatOverlay() {
           transition={{ duration: 0.2 }}
           style={{
             width: '100%', maxWidth: '480px', height: '100%',
-            background: 'var(--surface-color)', position: 'relative',
+            background: '#0a0f0d', position: 'relative', // Solid opaque color
             display: 'flex', flexDirection: 'column',
-            boxShadow: '0 0 50px rgba(0,0,0,0.8)'
+            boxShadow: '0 0 50px rgba(0,0,0,1)'
           }}
-          onClick={e => e.stopPropagation()} // Prevent closing when clicking inside
+          onClick={e => e.stopPropagation()}
         >
           {/* Chat Header */}
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px', background: 'var(--bg-color)' }}>
-            <button onClick={closeChat} style={{ background: 'var(--surface-light)', border: 'none', color: 'var(--text-main)', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px', background: '#0f1612' }}>
+            <button onClick={closeChat} style={{ background: '#1d2a23', border: 'none', color: 'var(--text-main)', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <X size={20} />
             </button>
             
-            <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', background: 'var(--surface-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', background: '#1d2a23', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {activeChatUser.selfiePath ? (
                 <img src={activeChatUser.selfiePath} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
@@ -118,7 +117,7 @@ export function ChatOverlay() {
           </div>
 
           {/* Chat Transcript Log */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', background: '#0a0f0d' }}>
             {messages.length === 0 ? (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center' }}>
                 Start your conversation! <br/>Messages are end-to-end direct.
@@ -129,10 +128,11 @@ export function ChatOverlay() {
                 return (
                   <div key={msg.id} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
                     <div style={{
-                      background: isMe ? 'linear-gradient(135deg, #10b981, #059669)' : 'var(--surface-light)',
+                      background: isMe ? '#10b981' : '#1d2a23', // Solid colors, no gradients
                       padding: '12px 16px', borderRadius: isMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                       color: 'white', fontSize: '15px', lineHeight: 1.4, wordBreak: 'break-word',
-                      border: isMe ? 'none' : '1px solid var(--border-color)'
+                      border: 'none',
+                      boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
                     }}>
                       {msg.message}
                     </div>
@@ -147,21 +147,21 @@ export function ChatOverlay() {
           </div>
 
           {/* Chat Input Dock */}
-          <form onSubmit={sendMessage} style={{ padding: '16px', background: 'var(--bg-color)', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '10px' }}>
+          <form onSubmit={sendMessage} style={{ padding: '16px', background: '#0f1612', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '10px' }}>
             <input
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder="Type your message..."
-              style={{ flex: 1, background: 'var(--surface-light)', border: '1px solid var(--border-color)', color: 'white', padding: '12px 16px', borderRadius: '24px', fontSize: '15px', outline: 'none' }}
+              style={{ flex: 1, background: '#1d2a23', border: '1px solid var(--border-color)', color: 'white', padding: '12px 16px', borderRadius: '24px', fontSize: '15px', outline: 'none' }}
             />
             <button type="submit" disabled={!inputText.trim()} style={{
-              background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none',
+              background: '#10b981', color: 'white', border: 'none',
               width: '46px', height: '46px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: inputText.trim() ? 'pointer' : 'not-allowed', opacity: inputText.trim() ? 1 : 0.5,
-              transition: '0.2s', boxShadow: inputText.trim() ? '0 4px 15px rgba(16, 185, 129, 0.4)' : 'none'
+              transition: '0.2s'
             }}>
-              <Send size={18} style={{ marginLeft: '4px' }} /> {/* Slight offset makes pencil/plane look centered */}
+              <Send size={18} style={{ marginLeft: '4px' }} />
             </button>
           </form>
         </motion.div>

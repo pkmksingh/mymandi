@@ -88,6 +88,15 @@ export const useStore = create(
         } catch (err) { console.error(err); }
       },
 
+      markChatAsRead: async (contactId) => {
+        const user = get().currentUser;
+        if (!user || !contactId) return;
+        try {
+          await fetch(`/api/messages/read/${contactId}/${user.id}`, { method: 'PATCH' });
+          get().fetchUnreadCount();
+        } catch (err) { console.error(err); }
+      },
+
       markAsSold: async (id) => {
         const oldListings = get().listings;
         // Optimistic update
