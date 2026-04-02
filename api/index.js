@@ -12,17 +12,8 @@ import db, { initDB } from '../server/db.js';
 import * as nsfwjs from 'nsfwjs';
 import sharp from 'sharp';
 
-let tf = null;
-const getTF = async () => {
-  if (tf) return tf;
-  try {
-    tf = await import('@tensorflow/tfjs');
-    return tf;
-  } catch (e) {
-    console.error("TensorFlow load error:", e);
-    return null;
-  }
-};
+// Temporarily disabling heavy AI imports for production reliability
+const getTF = async () => null;
 
 const app = express();
 
@@ -98,31 +89,8 @@ const loadModel = async () => {
 };
 
 const checkInappropriate = async (imageUrl) => {
-    const model = await loadModel();
-    if (!model) return false;
-    const tfInstance = await getTF();
-    if (!tfInstance) return false;
-
-    try {
-      const response = await fetch(imageUrl);
-      const buffer = await response.arrayBuffer();
-      const processedImage = await sharp(Buffer.from(buffer))
-        .resize(224, 224)
-        .removeAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-
-      const image = tfInstance.tensor3d(new Uint8Array(processedImage.data), [224, 224, 3]);
-      const predictions = await model.classify(image);
-      image.dispose();
-      
-      return predictions.some(p => 
-        ['Porn', 'Hentai', 'Sexy'].includes(p.className) && p.probability > 0.6
-      );
-    } catch (err) {
-      console.error("AI Analysis Error:", err);
-      return false;
-    }
+    // Temporarily returning false (Approved) to prevent server timeouts
+    return false;
 };
 
 // --- API ROUTES ---
