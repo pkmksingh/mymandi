@@ -133,7 +133,7 @@ export default function App() {
                     className="btn-secondary" 
                     style={{ fontSize: '11px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    <KeyRound size={13} /> Switch
+                    <KeyRound size={13} /> Switch Profile
                   </button>
                 </div>
               )}

@@ -29,7 +29,12 @@ export function ListingDetails() {
   if (!listing) return <div style={{ padding: '20px', textAlign: 'center' }}>Listing not found.</div>;
 
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }} 
+      animate={{ opacity: 1, x: 0 }} 
+      exit={{ opacity: 0, x: -20 }}
+      style={{ paddingBottom: '120px' }}
+    >
       {/* Back Button */}
       <button 
         onClick={() => navigate(-1)} 
@@ -42,8 +47,8 @@ export function ListingDetails() {
         <ChevronLeft size={24} />
       </button>
 
-      {/* Image Carousel (Simplified) */}
-      <div style={{ display: 'flex', overflowX: 'auto', gap: '16px', scrollSnapType: 'x mandatory', marginBottom: '24px' }}>
+      {/* Image Carousel */}
+      <div style={{ display: 'flex', overflowX: 'auto', gap: '16px', scrollSnapType: 'x mandatory', marginBottom: '24px' }} className="scroll-hide">
         {listing.images.map((img, idx) => (
           <div key={idx} style={{ minWidth: '100%', scrollSnapAlign: 'center', borderRadius: '16px', overflow: 'hidden', aspectRatio: '4/3' }}>
             <img src={img} alt={`Crop ${idx}`} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -55,9 +60,21 @@ export function ListingDetails() {
         <h1 style={{ fontSize: '28px', marginBottom: '8px' }}>
           {listing.cropName} {listing.quantity && <span style={{ fontSize: '18px', color: 'var(--text-muted)', fontWeight: 'normal' }}>({listing.quantity})</span>}
         </h1>
-        <p className="text-gradient" style={{ fontSize: '24px', fontWeight: 700, marginBottom: '16px' }}>
+        <p className="text-gradient" style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>
           {listing.price || 'Contact for price'}
         </p>
+
+        {/* Repositioned WhatsApp Share Button */}
+        <button 
+          className="btn-secondary"
+          onClick={() => {
+            const text = `Check out this crop on Meri Mandi:\n*${listing.cropName}*\nQuantity: ${listing.quantity}\nPrice: ${listing.price}\nLocation: ${listing.nearestCity}\n\nDownload app to buy!`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+          }}
+          style={{ width: '100%', marginBottom: '24px', background: '#25D366', color: 'white', border: 'none', gap: '8px' }}
+        >
+          <Share2 size={16} /> {t.shareOnWhatsapp}
+        </button>
 
         <div className="glass-panel" style={{ padding: '20px', display: 'grid', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -86,37 +103,28 @@ export function ListingDetails() {
 
       <div style={{ marginBottom: '32px' }}>
         <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Seller Info</h3>
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'var(--surface-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-              {listing.sellerSelfie ? (
-                <img src={listing.sellerSelfie} alt={listing.sellerName} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <span style={{ fontSize: '20px', fontWeight: 600 }}>{listing.sellerName.charAt(0)}</span>
-              )}
-            </div>
-            <div>
-              <h4 style={{ fontSize: '18px', marginBottom: '4px' }}>{listing.sellerName}</h4>
-              <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Meri Mandi Seller</p>
-            </div>
+        <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'var(--surface-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            {listing.sellerSelfie ? (
+              <img src={listing.sellerSelfie} alt={listing.sellerName} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span style={{ fontSize: '20px', fontWeight: 600 }}>{listing.sellerName.charAt(0)}</span>
+            )}
           </div>
-          <button 
-            className="btn-secondary"
-            onClick={() => {
-              const text = `Check out this crop on Meri Mandi:\n*${listing.cropName}*\nQuantity: ${listing.quantity}\nPrice: ${listing.price}\nLocation: ${listing.nearestCity}\n\nDownload app to buy!`;
-              window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-            }}
-            style={{ padding: '10px 16px', background: '#25D366', color: 'white', border: 'none', gap: '8px', fontSize: '13px' }}
-          >
-            <Share2 size={16} /> {t.shareOnWhatsapp}
-          </button>
+          <div>
+            <h4 style={{ fontSize: '18px', marginBottom: '4px' }}>{listing.sellerName}</h4>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Meri Mandi Seller</p>
+          </div>
         </div>
       </div>
 
-      {/* Action Buttons */}
+      {/* Action Buttons - Fixed Footer */}
       <div 
-        className="fixed-bottom" 
-        style={{ display: 'flex', gap: '16px' }}
+        style={{ 
+          position: 'fixed', bottom: 0, left: 0, right: 0, 
+          padding: '20px', background: 'linear-gradient(to top, var(--surface-color) 80%, transparent)', 
+          display: 'flex', gap: '16px', zIndex: 100
+        }}
       >
         <button 
           className="btn-secondary" 
