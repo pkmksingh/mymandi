@@ -1,11 +1,13 @@
 import { useStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, MapPin, Search, Loader2, MessageSquare } from 'lucide-react';
+import { PlusCircle, MapPin, Search, MessageSquare } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
+import { getOptimizedImage } from '../utils/image';
+import { SkeletonGrid } from './ListingSkeleton';
 
 export function SellerDashboard() {
-  const { listings, fetchListings, currentUser, isLoading, toggleInbox, unreadCount, missedCalls, resetMissedCalls } = useStore();
+  const { listings, fetchListings, currentUser, isLoading, toggleInbox, unreadCount, missedCalls, resetMissedCalls, markAsSold } = useStore();
   const navigate = useNavigate();
 
   const handleMessageClick = () => {
@@ -15,7 +17,6 @@ export function SellerDashboard() {
 
   useEffect(() => {
     fetchListings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [editingListing, setEditingListing] = useState(null);
@@ -23,13 +24,9 @@ export function SellerDashboard() {
 
   const myListings = listings.filter(l => l.sellerId === currentUser?.id && l.status !== 'sold');
 
-  const handleMarkSold = async (e, id) => {
+  const handleMarkSold = (e, id) => {
     e.stopPropagation();
-    try {
-      await fetch(`/api/listings/${id}/sold`, { method: 'PATCH' });
-    } catch (err) {
-      console.error("Failed to mark sold", err);
-    }
+    markAsSold(id);
   };
 
   const startEditing = (e, listing) => {
@@ -60,79 +57,75 @@ export function SellerDashboard() {
           <p style={{ color: 'var(--text-muted)' }}>Manage your crops and produce.</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <div style={{ position: 'relative' }}>
-            <button 
-              onClick={handleMessageClick} 
-              style={{ position: 'relative', background: 'var(--surface-light)', border: 'none', color: 'var(--primary-color)', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.2s' }}
-              title="Messages Inbox"
-              onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-            >
-              <MessageSquare size={24} />
-              {unreadCount > 0 && (
-                <div style={{ position: 'absolute', top: '-4px', right: '-4px', background: 'var(--danger-color)', color: 'white', fontSize: '10px', fontWeight: 'bold', width: '18px', height: '18px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--surface-light)', zIndex: 2 }}>
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </div>
-              )}
-            </button>
-            {missedCalls > 0 && (
-              <div 
-                style={{ 
-                  position: 'absolute', top: '-4px', left: '-4px', 
-                  background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: 'bold', 
-                  minWidth: '18px', height: '18px', padding: '0 4px', borderRadius: '10px', 
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                  border: '2px solid var(--surface-light)', zIndex: 1,
-                  boxShadow: '0 0 10px rgba(239, 68, 68, 0.4)'
-                }}
-                title={`${missedCalls} Missed Calls`}
-              >
-                {missedCalls}
-              </div>
-            )}
-          </div>
-          <button 
-            className="btn-primary" 
-            onClick={() => navigate('/seller/add')}
-            style={{ padding: '12px 20px', fontSize: '14px', borderRadius: '12px' }}
+        <button 
+          onClick={handleMessageClick} 
+          style={{ position: 'relative', background: 'var(--surface-light)', border: 'none', color: 'var(--primary-color)', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.2s' }}
+          title="Messages Inbox"
+          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          <MessageSquare size={24} />
+          {unreadCount > 0 && (
+            <div style={{ position: 'absolute', top: '-4px', right: '-4px', background: 'var(--danger-color)', color: 'white', fontSize: '10px', fontWeight: 'bold', width: '18px', height: '18px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--surface-light)', zIndex: 2 }}>
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </div>
+          )}
+        </button>
+        {missedCalls > 0 && (
+          <div 
+            style={{ 
+              position: 'absolute', top: '-4px', left: '-4px', 
+              background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: 'bold', 
+              minWidth: '18px', height: '18px', padding: '0 4px', borderRadius: '10px', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              border: '2px solid var(--surface-light)', zIndex: 1,
+              boxShadow: '0 0 10px rgba(239, 68, 68, 0.4)'
+            }}
+            title={`${missedCalls} Missed Calls`}
           >
-            <PlusCircle size={18} /> Add New
-          </button>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-          <Loader2 className="animate-spin" size={32} color="var(--primary-color)" />
-        </div>
-      ) : myListings.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '40px' }}>
-          <div style={{
-            width: '60px', height: '60px', borderRadius: '50%', background: 'var(--surface-light)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px'
-          }}>
-            <Search size={28} color="var(--text-muted)" />
+            {missedCalls}
           </div>
-          <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>No Listings Yet</h3>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>List your first crop to connect with buyers.</p>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
-          {myListings.map(listing => {
-            const isSold = listing.status === 'sold';
-            return (
-              <motion.div 
-                key={listing.id} 
-                className="glass-panel"
-                whileHover={{ y: -4, scale: 1.02 }}
-                style={{ overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column', opacity: isSold ? 0.6 : 1 }}
-              >
-                <div style={{ width: '100%', height: '120px', position: 'relative', flexShrink: 0 }}>
-                  <img 
-                    src={listing.images[0]} 
-                    alt={listing.cropName}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', filter: isSold ? 'grayscale(100%)' : 'none' }}
-                  />
+        )}
+      </div>
+      <button 
+        className="btn-primary" 
+        onClick={() => navigate('/seller/add')}
+        style={{ padding: '12px 20px', fontSize: '14px', borderRadius: '12px' }}
+      >
+        <PlusCircle size={18} /> Add New
+      </button>
+  </div>
+
+  {isLoading && myListings.length === 0 ? (
+    <SkeletonGrid />
+  ) : myListings.length === 0 ? (
+    <div className="glass-panel" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '40px' }}>
+      <div style={{
+        width: '60px', height: '60px', borderRadius: '50%', background: 'var(--surface-light)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px'
+      }}>
+        <Search size={28} color="var(--text-muted)" />
+      </div>
+      <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>No Listings Yet</h3>
+      <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>List your first crop to connect with buyers.</p>
+    </div>
+  ) : (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
+      {myListings.map(listing => {
+        const isSold = listing.status === 'sold';
+        return (
+          <motion.div 
+            key={listing.id} 
+            className="glass-panel"
+            whileHover={{ y: -4, scale: 1.02 }}
+            style={{ overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column', opacity: isSold ? 0.6 : 1 }}
+          >
+            <div style={{ width: '100%', height: '120px', position: 'relative', flexShrink: 0 }}>
+              <img 
+                src={getOptimizedImage(listing.images[0], 200, 200)} 
+                alt={listing.cropName}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', filter: isSold ? 'grayscale(100%)' : 'none' }}
+              />
                   {isSold && (
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700 }}>
                       SOLD

@@ -1,0 +1,21 @@
+{
+  "name": "Meri Mandi - Farmer Marketplace",
+  "short_name": "Meri Mandi",
+  "description": "Connecting farmers directly with buyers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060907",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "/upiqr.jpeg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/upiqr.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

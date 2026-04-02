@@ -15,6 +15,13 @@ export function CallOverlay() {
   const [videoActive, setVideoActive] = useState(false);
   const [incomingVideoRequest, setIncomingVideoRequest] = useState(false);
   const [isRequestingVideo, setIsRequestingVideo] = useState(false);
+  const [iceServers] = useState([
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+  ]);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -115,22 +122,45 @@ export function CallOverlay() {
     return () => clearTimeout(timeoutId);
   }, [activeCall]);
 
+  const optimizeAudio = (peer) => {
+    try {
+      const senders = peer.getSenders();
+      const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+      if (audioSender) {
+        const params = audioSender.getParameters();
+        if (params.encodings && params.encodings[0]) {
+          params.encodings[0].maxBitrate = 64000;
+          audioSender.setParameters(params);
+        }
+      }
+    } catch (e) {
+      console.warn("Bitrate optimization failed", e);
+    }
+  };
+
   useEffect(() => {
     if (activeCall && !stream && !callAccepted && activeCall.callerId === currentUser?.id) {
-      navigator.mediaDevices.getUserMedia({ video: false, audio: true }).then((currentStream) => {
+      navigator.mediaDevices.getUserMedia({ 
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, 
+        video: false 
+      }).then((currentStream) => {
         setStream(currentStream);
         if (localVideoRef.current) localVideoRef.current.srcObject = currentStream;
         
-        const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        const peer = new RTCPeerConnection({ iceServers });
         
         currentStream.getTracks().forEach(track => peer.addTrack(track, currentStream));
         
+        const iceQueue = [];
+
         peer.ontrack = (event) => {
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = event.streams[0];
+            remoteVideoRef.current.play().catch(() => {});
           }
           if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = event.streams[0];
+            remoteAudioRef.current.play().catch(() => {});
           }
         };
 
@@ -141,18 +171,35 @@ export function CallOverlay() {
         };
 
         const unsubIce = socket.subscribeUser(currentUser.id, 'ice-candidate', (data) => {
-          if (data.candidate) { 
-            peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.error("ICE error:", e));
+          if (data.candidate) {
+            if (peer.remoteDescription) {
+              peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+            } else {
+              iceQueue.push(data.candidate);
+            }
           }
         });
 
         const unsubAccepted = socket.subscribeUser(currentUser.id, 'call-accepted', (signal) => {
           setCallAccepted(true);
-          useStore.setState({ activeCall: { ...activeCall, status: 'connected' } });
-          peer.setRemoteDescription(new RTCSessionDescription(signal.signal));
+          const currentActiveCall = useStore.getState().activeCall;
+          if (currentActiveCall) {
+            useStore.setState({ activeCall: { ...currentActiveCall, status: 'connected' } });
+          }
+          peer.setRemoteDescription(new RTCSessionDescription(signal.signal)).then(() => {
+            optimizeAudio(peer);
+            while (iceQueue.length > 0) {
+              peer.addIceCandidate(new RTCIceCandidate(iceQueue.shift())).catch(() => {});
+            }
+          });
         });
 
-        peer.oniceconnectionstatechange = () => console.log("ICE state (Caller):", peer.iceConnectionState);
+        peer.oniceconnectionstatechange = () => {
+          console.log("ICE state (Caller):", peer.iceConnectionState);
+          if (peer.iceConnectionState === 'failed' || peer.iceConnectionState === 'closed') {
+            leaveCall();
+          }
+        };
 
         peer.createOffer().then(offer => {
           peer.setLocalDescription(offer);
@@ -179,6 +226,13 @@ export function CallOverlay() {
         endCall();
       });
     }
+
+    return () => {
+      if (connectionRef.current) {
+        connectionRef.current.close();
+        connectionRef.current = null;
+      }
+    };
   }, [activeCall, stream, currentUser, callAccepted]);
 
 
@@ -188,20 +242,27 @@ export function CallOverlay() {
     setCallAccepted(true);
     useStore.setState({ activeCall: { ...activeCall, status: 'connected' } });
 
-    navigator.mediaDevices.getUserMedia({ video: false, audio: true }).then((currentStream) => {
+    navigator.mediaDevices.getUserMedia({ 
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, 
+      video: false 
+    }).then((currentStream) => {
       setStream(currentStream);
       if (localVideoRef.current) localVideoRef.current.srcObject = currentStream;
 
-      const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      const peer = new RTCPeerConnection({ iceServers });
       
       currentStream.getTracks().forEach(track => peer.addTrack(track, currentStream));
+      
+      const iceQueue = [];
       
       peer.ontrack = (event) => {
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = event.streams[0];
+          remoteVideoRef.current.play().catch(() => {});
         }
         if (remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = event.streams[0];
+          remoteAudioRef.current.play().catch(() => {});
         }
       };
 
@@ -212,14 +273,27 @@ export function CallOverlay() {
       };
 
       const unsubIce = socket.subscribeUser(currentUser.id, 'ice-candidate', (data) => {
-        if (data.candidate && peer.remoteDescription) {
-          peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.error("ICE error:", e));
+        if (data.candidate) {
+          if (peer.remoteDescription) {
+            peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+          } else {
+            iceQueue.push(data.candidate);
+          }
         }
       });
 
-      peer.oniceconnectionstatechange = () => console.log("ICE state (Receiver):", peer.iceConnectionState);
+      peer.oniceconnectionstatechange = () => {
+        console.log("ICE state (Receiver):", peer.iceConnectionState);
+        if (peer.iceConnectionState === 'failed' || peer.iceConnectionState === 'closed') {
+          leaveCall();
+        }
+      };
 
       peer.setRemoteDescription(new RTCSessionDescription(activeCall.signalData)).then(() => {
+        optimizeAudio(peer);
+        while (iceQueue.length > 0) {
+          peer.addIceCandidate(new RTCIceCandidate(iceQueue.shift())).catch(() => {});
+        }
         peer.createAnswer().then(answer => {
           peer.setLocalDescription(answer);
           socket.emit('call-accepted', { signal: answer, to: activeCall.callerId });

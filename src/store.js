@@ -86,6 +86,24 @@ export const useStore = create(
         } catch (err) { console.error(err); }
       },
 
+      markAsSold: async (id) => {
+        const oldListings = get().listings;
+        // Optimistic update
+        set(state => ({
+          listings: state.listings.map(l => l.id === id ? { ...l, status: 'sold' } : l)
+        }));
+
+        try {
+          const res = await fetch(`/api/listings/${id}/sold`, { method: 'PATCH' });
+          if (!res.ok) throw new Error("Failed to update");
+        } catch (err) {
+          console.error(err);
+          // Rollback on error
+          set({ listings: oldListings });
+          alert("Failed to mark as sold. Please try again.");
+        }
+      },
+
       fetchListings: async () => {
         set({ isLoading: true });
         try {

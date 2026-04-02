@@ -1,22 +1,29 @@
 import { useStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { Search, MapPin, Grid, List as ListIcon, Loader2, MessageSquare } from 'lucide-react';
+import { Search, MapPin, Grid, List as ListIcon, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
+import { getOptimizedImage } from '../utils/image';
+import { SkeletonGrid } from './ListingSkeleton';
 
 export function BuyerDashboard() {
   const { listings, fetchListings, isLoading, toggleInbox, unreadCount, currentUser } = useStore();
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState('list');
+  const [displaySearch, setDisplaySearch] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchListings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(displaySearch), 300);
+    return () => clearTimeout(timer);
+  }, [displaySearch]);
+
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // Radius of the earth in km
+    const R = 6371; 
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = 
@@ -24,8 +31,7 @@ export function BuyerDashboard() {
       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const d = R * c; // Distance in km
-    return d;
+    return R * c;
   };
 
   const filteredListings = listings
@@ -80,8 +86,8 @@ export function BuyerDashboard() {
             type="text" 
             className="input-base" 
             placeholder="Search crops or farmers..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={displaySearch}
+            onChange={(e) => setDisplaySearch(e.target.value)}
             style={{ paddingLeft: '48px', borderRadius: '14px', background: 'var(--surface-light)' }}
           />
         </div>
@@ -103,10 +109,8 @@ export function BuyerDashboard() {
         </div>
       </div>
 
-      {isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-          <Loader2 className="animate-spin" size={32} color="var(--primary-color)" />
-        </div>
+      {isLoading && listings.length === 0 ? (
+        <SkeletonGrid />
       ) : (
         <AnimatePresence>
           {filteredListings.length === 0 ? (
@@ -142,7 +146,7 @@ export function BuyerDashboard() {
                     flexShrink: 0
                   }}>
                     <img 
-                      src={listing.images[0]} 
+                      src={getOptimizedImage(listing.images[0], viewMode === 'list' ? 200 : 400)} 
                       alt={listing.cropName}
                       loading="lazy"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}

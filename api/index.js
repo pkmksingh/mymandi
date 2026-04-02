@@ -168,10 +168,17 @@ app.post('/api/listings', upload.array('images', 5), async (req, res) => {
       return res.status(400).json({ error: 'Missing fields' });
     }
 
+    let flagged = false;
     for (const file of req.files) {
       if (await checkInappropriate(file.path)) {
-        return res.status(400).json({ error: 'Listing rejected: Inappropriate content detected.' });
+        flagged = true;
+        break;
       }
+    }
+
+    if (flagged) {
+      await Promise.all(req.files.map(file => cloudinary.uploader.destroy(file.filename)));
+      return res.status(400).json({ error: 'Listing rejected: Inappropriate content detected in one or more images.' });
     }
 
     const listingId = uuidv4();
