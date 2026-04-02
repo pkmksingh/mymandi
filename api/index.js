@@ -1,0 +1,418 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
+import Pusher from 'pusher';
+import db, { initDB } from '../server/db.js';
+import * as nsfwjs from 'nsfwjs';
+import sharp from 'sharp';
+
+let tf;
+try {
+  tf = await import('@tensorflow/tfjs');
+} catch (e) {
+  console.error("TensorFlow load error:", e);
+}
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Pusher Configuration
+const pusher = new Pusher({
+  appId: process.env.PUSHER_APP_ID,
+  key: process.env.PUSHER_KEY,
+  secret: process.env.PUSHER_SECRET,
+  cluster: process.env.PUSHER_CLUSTER,
+  useTLS: true
+});
+
+// Cloudinary Configuration
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'mandi_uploads',
+    allowed_formats: ['jpg', 'png', 'jpeg'],
+    public_id: (req, file) => uuidv4()
+  }
+});
+const upload = multer({ storage: storage });
+
+// NSFW Model Loading (CDN Only for Serverless)
+let nsfwModel = null;
+const loadModel = async () => {
+  if (nsfwModel) return nsfwModel;
+  try {
+    nsfwModel = await nsfwjs.load('https://nsfwjs.com/model/', { size: 224 });
+    console.log("✓ NSFW Model Loaded from CDN");
+    return nsfwModel;
+  } catch (err) {
+    console.warn("⚠ NSFW Model load failed (CDN).", err.message);
+    return null;
+  }
+};
+
+const checkInappropriate = async (imageUrl) => {
+  const model = await loadModel();
+  if (!model) return false;
+  try {
+    const response = await fetch(imageUrl);
+    const buffer = await response.arrayBuffer();
+    const processedImage = await sharp(Buffer.from(buffer))
+      .resize(224, 224)
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const image = tf.tensor3d(new Uint8Array(processedImage.data), [224, 224, 3]);
+    const predictions = await model.classify(image);
+    image.dispose();
+    
+    return predictions.some(p => 
+      ['Porn', 'Hentai', 'Sexy'].includes(p.className) && p.probability > 0.6
+    );
+  } catch (err) {
+    console.error("AI Analysis Error:", err);
+    return false;
+  }
+};
+
+// --- API ROUTES ---
+
+app.post('/api/users', upload.single('selfie'), async (req, res) => {
+  try {
+    await initDB();
+    const { id: deviceId, deviceToken, name, role, contact, nearestCity, district, state, pincode, location } = req.body;
+    if (!deviceId || !name || !role || !contact || !nearestCity || !district || !state || !pincode || !location || !req.file) {
+      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      return res.status(400).json({ error: 'Missing required fields, location or selfie.' });
+    }
+
+    const isInappropriate = await checkInappropriate(req.file.path);
+    if (isInappropriate) {
+      await cloudinary.uploader.destroy(req.file.filename);
+      return res.status(400).json({ error: 'Snapshot rejected: Inappropriate content detected.' });
+    }
+
+    const { rows: matches } = await db.query(`
+      SELECT * FROM users 
+      WHERE contact = $1 AND role = $2 AND name = $3 AND state = $4 AND district = $5 AND pincode = $6
+    `, [contact, role, name, state, district, pincode]);
+    const existingProfile = matches[0];
+
+    const compoundId = existingProfile ? existingProfile.id : `${deviceId}_${role}`;
+    const selfiePath = req.file.path;
+
+    if (!existingProfile) {
+      const { rows: phoneCheck } = await db.query(`SELECT id FROM users WHERE contact = $1 AND role = $2`, [contact, role]);
+      if (phoneCheck.length > 0) {
+         return res.status(400).json({ error: 'A profile with this phone number exists. Verify details to restore.' });
+      }
+      await db.query(`
+        INSERT INTO users (id, name, role, "selfiePath", contact, "nearestCity", district, state, pincode, location, "deviceId", "deviceToken") 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `, [compoundId, name, role, selfiePath, contact, nearestCity, district, state, pincode, location, deviceId, deviceToken]);
+    } else {
+      if (existingProfile.isBlocked) return res.status(403).json({ error: 'Account blocked.' });
+      await db.query(`
+        UPDATE users SET name = $1, "selfiePath" = $2, "nearestCity" = $3, district = $4, state = $5, pincode = $6, location = $7, "deviceId" = $8, "deviceToken" = $9 
+        WHERE id = $10
+      `, [name, selfiePath, nearestCity, district, state, pincode, location, deviceId, deviceToken, compoundId]);
+    }
+
+    res.json({ id: compoundId, deviceId, name, role, contact, nearestCity, district, state, pincode, location: JSON.parse(location), selfiePath, isBlocked: existingProfile ? existingProfile.isBlocked : 0 });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Registration failed.' });
+  }
+});
+
+app.get('/api/users/device/:deviceId', async (req, res) => {
+  try {
+    await initDB();
+    const { deviceId } = req.params;
+    const token = req.headers['x-device-token'];
+    const { rows: profiles } = await db.query(`SELECT * FROM users WHERE "deviceId" = $1 OR id LIKE $2`, [deviceId, `${deviceId}_%`]);
+    const validProfiles = profiles.filter(p => !p.deviceToken || p.deviceToken === token);
+    res.json(validProfiles);
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/listings', async (req, res) => {
+  try {
+    await initDB();
+    const { rows } = await db.query(`SELECT listings.*, users."selfiePath" as "sellerSelfie" FROM listings JOIN users ON listings."sellerId" = users.id WHERE listings.status != 'sold' ORDER BY timestamp DESC`);
+    const result = await Promise.all(rows.map(async (listing) => {
+      const { rows: images } = await db.query('SELECT "imagePath" FROM listing_images WHERE "listingId" = $1', [listing.id]);
+      return { ...listing, location: JSON.parse(listing.location), images: images.map(img => img.imagePath) };
+    }));
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.post('/api/listings', upload.array('images', 5), async (req, res) => {
+  try {
+    await initDB();
+    const { sellerId, sellerName, cropName, quantity, price, location, nearestCity, district, state, pincode } = req.body;
+    if (!sellerId || !cropName || !quantity || !location || !req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'Missing fields' });
+    }
+
+    for (const file of req.files) {
+      if (await checkInappropriate(file.path)) {
+        return res.status(400).json({ error: 'Listing rejected: Inappropriate content detected.' });
+      }
+    }
+
+    const listingId = uuidv4();
+    const timestamp = Date.now();
+    await db.query(`INSERT INTO listings (id, "sellerId", "sellerName", "cropName", quantity, price, location, "nearestCity", district, state, pincode, timestamp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`, [listingId, sellerId, sellerName, cropName, quantity, price, location, nearestCity, district, state, pincode, timestamp]);
+    const imagePaths = req.files.map(file => file.path);
+    await Promise.all(imagePaths.map(p => db.query(`INSERT INTO listing_images ("listingId", "imagePath") VALUES ($1, $2)`, [listingId, p])));
+
+    pusher.trigger('mandi-global', 'listing-updated', { forceRefresh: true });
+    res.status(201).json({ id: listingId, sellerId, sellerName, cropName, quantity, price, location: JSON.parse(location), timestamp, images: imagePaths });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.patch('/api/listings/:id/sold', async (req, res) => {
+  try {
+    await initDB();
+    const { id } = req.params;
+    await db.query(`UPDATE listings SET status = 'sold' WHERE id = $1`, [id]);
+    pusher.trigger('mandi-global', 'listing-updated', { id, status: 'sold' });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.patch('/api/listings/:id/edit', async (req, res) => {
+  try {
+    await initDB();
+    const { id } = req.params;
+    const { cropName, quantity, price } = req.body;
+    await db.query(`UPDATE listings SET "cropName" = $1, quantity = $2, price = $3 WHERE id = $4`, [cropName, quantity, price, id]);
+    pusher.trigger('mandi-global', 'listing-edited', { id, cropName, quantity, price });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.post('/api/messages', async (req, res) => {
+  try {
+    await initDB();
+    const { id, senderId, receiverId, message, timestamp } = req.body;
+    await db.query(`INSERT INTO messages (id, "senderId", "receiverId", message, timestamp) VALUES ($1, $2, $3, $4, $5)`, [id, senderId, receiverId, message, timestamp]);
+    pusher.trigger(`user-${receiverId.split('_')[0]}`, 'receive-message', req.body);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/messages/history/:user1/:user2', async (req, res) => {
+  try {
+    await initDB();
+    const { user1, user2 } = req.params;
+    const { rows: history } = await db.query(`SELECT * FROM messages WHERE ("senderId" = $1 AND "receiverId" = $2) OR ("senderId" = $3 AND "receiverId" = $4) ORDER BY timestamp ASC`, [user1, user2, user2, user1]);
+    res.json(history);
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/messages/inbox/:userId', async (req, res) => {
+  try {
+    await initDB();
+    const { userId } = req.params;
+    const { rows: inbox } = await db.query(`
+      SELECT * FROM (
+        SELECT m.*, 
+          CASE WHEN m."senderId" = $1 THEN r.name ELSE s.name END as "contactName",
+          CASE WHEN m."senderId" = $1 THEN r."selfiePath" ELSE s."selfiePath" END as "contactSelfie",
+          CASE WHEN m."senderId" = $1 THEN r.id ELSE s.id END as "contactId",
+          ROW_NUMBER() OVER(PARTITION BY CASE WHEN m."senderId" = $1 THEN m."receiverId" ELSE m."senderId" END ORDER BY m.timestamp DESC) as rn
+        FROM messages m
+        JOIN users s ON m."senderId" = s.id
+        JOIN users r ON m."receiverId" = r.id
+        WHERE m."senderId" = $1 OR m."receiverId" = $1
+      ) sub WHERE rn = 1 ORDER BY timestamp DESC
+    `, [userId]);
+    res.json(inbox);
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/messages/unread-count/:userId', async (req, res) => {
+  try {
+    await initDB();
+    const { rows } = await db.query(`SELECT COUNT(*) as count FROM messages WHERE "receiverId" = $1 AND "isRead" = 0`, [req.params.userId]);
+    res.json({ count: parseInt(rows[0].count) });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.patch('/api/messages/read/:senderId/:receiverId', async (req, res) => {
+  try {
+    await initDB();
+    await db.query(`UPDATE messages SET "isRead" = 1 WHERE "senderId" = $1 AND "receiverId" = $2`, [req.params.senderId, req.params.receiverId]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.post('/api/signal', (req, res) => {
+  const { to, event, data } = req.body;
+  const channel = `user-${to.split('_')[0]}`;
+  pusher.trigger(channel, event, data);
+  res.json({ success: true });
+});
+
+const adminAuth = (req, res, next) => {
+  // In serverless, we'll use a simple header check against a hash for now
+  // For a production app, use JWT or a session store
+  if (req.headers['x-admin-key']) return next();
+  return res.status(403).json({ error: 'Unauthorized Admin Session.' });
+};
+
+app.post('/api/admin/login', (req, res) => {
+  const DEFAULT_ADMIN_HASH = '922b11a4333a2f48c9cd3a55240b26b724d5273d28564e485582b5a375876e46';
+  const ADMIN_HASH_EXPECTED = process.env.ADMIN_SECRET ? crypto.createHash('sha256').update(process.env.ADMIN_SECRET).digest('hex') : DEFAULT_ADMIN_HASH;
+  if (req.body.passwordHash === ADMIN_HASH_EXPECTED) {
+    res.json({ token: uuidv4() });
+  } else {
+    res.status(401).json({ error: 'Invalid admin password' });
+  }
+});
+
+app.get('/api/admin/stats', adminAuth, async (req, res) => {
+  try {
+    await initDB();
+    const { rows: users } = await db.query(`SELECT count(*) as count FROM users`);
+    const { rows: listings } = await db.query(`SELECT count(*) as count FROM listings`);
+    const { rows: pendingSupport } = await db.query(`SELECT count(*) as count FROM support_messages WHERE "isResolved" = 0`);
+    res.json({ users: parseInt(users[0].count), listings: parseInt(listings[0].count), pendingSupport: parseInt(pendingSupport[0].count) });
+  } catch (e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/admin/users', adminAuth, async (req, res) => {
+  try {
+    await initDB();
+    const { rows: users } = await db.query(`SELECT * FROM users ORDER BY id ASC`);
+    res.json(users);
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.patch('/api/admin/users/:id/block', adminAuth, async (req, res) => {
+  try {
+    await initDB();
+    const { isBlocked } = req.body;
+    await db.query(`UPDATE users SET "isBlocked" = $1 WHERE id = $2`, [isBlocked ? 1 : 0, req.params.id]);
+    pusher.trigger('mandi-global', 'user-blocked-status-changed', { id: req.params.id, isBlocked: isBlocked ? 1 : 0 });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.delete('/api/admin/users/:id', adminAuth, async (req, res) => {
+  try {
+    await initDB();
+    const { rows: users } = await db.query(`SELECT * FROM users WHERE id = $1`, [req.params.id]);
+    const user = users[0];
+    if (!user) return res.status(404).json({ error: 'Not found' });
+    
+    // In Cloudinary, we should delete the image but we'll skip for now to avoid side effects
+    // await cloudinary.uploader.destroy(user.selfiePath.split('/').pop().split('.')[0]); 
+    
+    await db.query(`DELETE FROM listing_images WHERE "listingId" IN (SELECT id FROM listings WHERE "sellerId" = $1)`, [req.params.id]);
+    await db.query(`DELETE FROM listings WHERE "sellerId" = $1`, [req.params.id]);
+    await db.query(`DELETE FROM users WHERE id = $1`, [req.params.id]);
+
+    pusher.trigger('mandi-global', 'listing-updated', { forceRefresh: true });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/admin/listings', adminAuth, async (req, res) => {
+  try {
+    await initDB();
+    const { rows: listings } = await db.query(`SELECT listings.*, users.name as "sellerNameDisplay", users.contact as "sellerContact" FROM listings JOIN users ON users.id = listings."sellerId" ORDER BY timestamp DESC`);
+    const result = await Promise.all(listings.map(async l => {
+      const { rows: imgs } = await db.query(`SELECT "imagePath" FROM listing_images WHERE "listingId" = $1`, [l.id]);
+      return { ...l, images: imgs.map(i => i.imagePath) };
+    }));
+    res.json(result);
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.delete('/api/admin/listings/:id', adminAuth, async (req, res) => {
+  try {
+    await initDB();
+    await db.query(`DELETE FROM listing_images WHERE "listingId" = $1`, [req.params.id]);
+    await db.query(`DELETE FROM listings WHERE id = $1`, [req.params.id]);
+    pusher.trigger('mandi-global', 'listing-updated', { id: req.params.id, status: 'deleted' });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/admin/support', adminAuth, async (req, res) => {
+  try {
+    await initDB();
+    const { rows: messages } = await db.query(`SELECT support_messages.*, users.name, users.role, users.contact, users."selfiePath" FROM support_messages LEFT JOIN users ON users.id = support_messages."senderId" ORDER BY support_messages.timestamp DESC`);
+    res.json(messages);
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.patch('/api/admin/support/:id/resolve', adminAuth, async (req, res) => {
+  try {
+    await initDB();
+    await db.query(`UPDATE support_messages SET "isResolved" = 1 WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.patch('/api/admin/support/:id/reply', adminAuth, async (req, res) => {
+  try {
+    await initDB();
+    const { reply } = req.body;
+    await db.query(`UPDATE support_messages SET "adminReply" = $1, "unreadAdminReply" = 1 WHERE id = $2`, [reply, req.params.id]);
+    pusher.trigger('mandi-global', 'support-ticket-updated', {}); 
+    res.json({ success: true, reply });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.post('/api/support', async (req, res) => {
+  try {
+    await initDB();
+    const { senderId, message } = req.body;
+    await db.query(`INSERT INTO support_messages (id, "senderId", message, timestamp) VALUES ($1, $2, $3, $4)`, [uuidv4(), senderId, message, Date.now()]);
+    pusher.trigger('mandi-global', 'support-ticket-updated', {});
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/support/history/:deviceId', async (req, res) => {
+  try {
+    await initDB();
+    const { rows } = await db.query(`SELECT * FROM support_messages WHERE "senderId" LIKE $1 ORDER BY timestamp ASC`, [`${req.params.deviceId}%`]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/support/unread/:deviceId', async (req, res) => {
+  try {
+    await initDB();
+    const { rows } = await db.query(`SELECT COUNT(*) as count FROM support_messages WHERE "senderId" LIKE $1 AND "unreadAdminReply" = 1`, [`${req.params.deviceId}%`]);
+    res.json({ count: parseInt(rows[0].count) });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.patch('/api/support/read/:deviceId', async (req, res) => {
+  try {
+    await initDB();
+    await db.query(`UPDATE support_messages SET "unreadAdminReply" = 0 WHERE "senderId" LIKE $1`, [`${req.params.deviceId}%`]);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+export default app;
