@@ -41,7 +41,11 @@ export default function App() {
     
     // Global Channel Listeners
     const unsubUpdate = socket.on('listing-updated', (data) => {
-      useStore.getState().updateListingStatus(data.id, data.status);
+      if (data.forceRefresh) {
+        useStore.getState().fetchListings();
+      } else {
+        useStore.getState().updateListingStatus(data.id, data.status);
+      }
     });
 
     const unsubEdit = socket.on('listing-edited', (data) => {

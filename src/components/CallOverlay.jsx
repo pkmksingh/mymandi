@@ -23,8 +23,7 @@ export function CallOverlay() {
   
   const leaveCall = () => {
     if (connectionRef.current) {
-      if (connectionRef.current.close) connectionRef.current.close();
-      else connectionRef.current.close();
+      connectionRef.current.close();
     }
     
     if (stream) {
@@ -152,11 +151,24 @@ export function CallOverlay() {
           peer.setRemoteDescription(new RTCSessionDescription(signal.signal));
         });
 
+        peer.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit('ice-candidate', { candidate: event.candidate, to: activeCall.receiverId });
+          }
+        };
+
+        const unsubIce = socket.subscribeUser(currentUser.id, 'ice-candidate', (data) => {
+          if (data.candidate && peer.remoteDescription) {
+            peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.error("ICE error:", e));
+          }
+        });
+
         connectionRef.current = { 
           peer,
           close: () => {
             peer.close();
             unsubAccepted();
+            unsubIce();
           }
         };
       }).catch(err => {
@@ -191,6 +203,18 @@ export function CallOverlay() {
         }
       };
 
+      peer.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('ice-candidate', { candidate: event.candidate, to: activeCall.callerId });
+        }
+      };
+
+      const unsubIce = socket.subscribeUser(currentUser.id, 'ice-candidate', (data) => {
+        if (data.candidate && peer.remoteDescription) {
+          peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.error("ICE error:", e));
+        }
+      });
+
       peer.setRemoteDescription(new RTCSessionDescription(activeCall.signalData)).then(() => {
         peer.createAnswer().then(answer => {
           peer.setLocalDescription(answer);
@@ -198,7 +222,13 @@ export function CallOverlay() {
         });
       });
 
-      connectionRef.current = peer;
+      connectionRef.current = {
+        peer,
+        close: () => {
+          peer.close();
+          unsubIce();
+        }
+      };
     });
   };
 
