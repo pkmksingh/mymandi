@@ -231,12 +231,14 @@ export function CallOverlay() {
 
       if (connectionRef.current) {
         const peer = connectionRef.current.peer || connectionRef.current;
-        const senders = peer.getSenders();
-        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-        if (videoSender) {
-          videoSender.replaceTrack(videoTrack);
-        } else {
-          peer.addTrack(videoTrack, stream);
+        if (peer && typeof peer.getSenders === 'function') {
+          const senders = peer.getSenders();
+          const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+          if (videoSender) {
+            videoSender.replaceTrack(videoTrack);
+          } else {
+            peer.addTrack(videoTrack, stream);
+          }
         }
       }
       setVideoActive(true);

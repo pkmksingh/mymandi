@@ -5,11 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { socket } from '../socket';
 
 export function HelpOverlay() {
-  const [isOpen, setIsOpen] = useState(false);
+  const { showHelp: isOpen, toggleHelp: setIsOpen, currentUser, deviceId } = useStore();
   const [message, setMessage] = useState('');
   const [history, setHistory] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { currentUser, deviceId } = useStore();
 
   const fetchUnreadCount = async () => {
     const id = currentUser ? currentUser.id.split('_')[0] : deviceId;
@@ -92,34 +91,6 @@ export function HelpOverlay() {
 
   return (
     <>
-      <button 
-        onClick={() => setIsOpen(true)}
-        style={{
-          position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          background: 'linear-gradient(135deg, #10b981, #059669)',
-          color: 'white',
-          border: 'none',
-          borderRadius: '50px',
-          padding: '10px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
-          cursor: 'pointer',
-          zIndex: 900,
-          fontWeight: 600,
-          fontSize: '13px'
-        }}
-      >
-        <MessageSquare size={16} /> Need Help?
-        {unreadCount > 0 && (
-          <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: 'var(--danger-color)', color: 'white', fontSize: '10px', fontWeight: 'bold', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--surface-color)' }}>
-            {unreadCount}
-          </span>
-        )}
-      </button>
 
       <AnimatePresence>
         {isOpen && (

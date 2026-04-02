@@ -112,6 +112,12 @@ export default function App() {
                 >
                   <Heart size={12} fill="white" /> Support
                 </button>
+                <button 
+                  onClick={() => useStore.getState().toggleHelp()}
+                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', borderRadius: '12px', padding: '4px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontWeight: 600, marginLeft: '8px' }}
+                >
+                   Help
+                </button>
               </div>
               {currentUser && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>

@@ -180,7 +180,7 @@ app.post('/api/listings', upload.array('images', 5), async (req, res) => {
     const imagePaths = req.files.map(file => file.path);
     await Promise.all(imagePaths.map(p => db.query(`INSERT INTO listing_images ("listingId", "imagePath") VALUES ($1, $2)`, [listingId, p])));
 
-    pusher.trigger('mandi-global', 'listing-updated', { forceRefresh: true });
+    await pusher.trigger('mandi-global', 'listing-updated', { forceRefresh: true });
     res.status(201).json({ id: listingId, sellerId, sellerName, cropName, quantity, price, location: JSON.parse(location), timestamp, images: imagePaths });
   } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -190,7 +190,7 @@ app.patch('/api/listings/:id/sold', async (req, res) => {
     await initDB();
     const { id } = req.params;
     await db.query(`UPDATE listings SET status = 'sold' WHERE id = $1`, [id]);
-    pusher.trigger('mandi-global', 'listing-updated', { id, status: 'sold' });
+    await pusher.trigger('mandi-global', 'listing-updated', { id, status: 'sold' });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -201,7 +201,7 @@ app.patch('/api/listings/:id/edit', async (req, res) => {
     const { id } = req.params;
     const { cropName, quantity, price } = req.body;
     await db.query(`UPDATE listings SET "cropName" = $1, quantity = $2, price = $3 WHERE id = $4`, [cropName, quantity, price, id]);
-    pusher.trigger('mandi-global', 'listing-edited', { id, cropName, quantity, price });
+    await pusher.trigger('mandi-global', 'listing-edited', { id, cropName, quantity, price });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -211,7 +211,7 @@ app.post('/api/messages', async (req, res) => {
     await initDB();
     const { id, senderId, receiverId, message, timestamp } = req.body;
     await db.query(`INSERT INTO messages (id, "senderId", "receiverId", message, timestamp) VALUES ($1, $2, $3, $4, $5)`, [id, senderId, receiverId, message, timestamp]);
-    pusher.trigger(`user-${receiverId.split('_')[0]}`, 'receive-message', req.body);
+    await pusher.trigger(`user-${receiverId.split('_')[0]}`, 'receive-message', req.body);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -262,10 +262,10 @@ app.patch('/api/messages/read/:senderId/:receiverId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
 
-app.post('/api/signal', (req, res) => {
+app.post('/api/signal', async (req, res) => {
   const { to, event, data } = req.body;
   const channel = `user-${to.split('_')[0]}`;
-  pusher.trigger(channel, event, data);
+  await pusher.trigger(channel, event, data);
   res.json({ success: true });
 });
 
@@ -309,7 +309,7 @@ app.patch('/api/admin/users/:id/block', adminAuth, async (req, res) => {
     await initDB();
     const { isBlocked } = req.body;
     await db.query(`UPDATE users SET "isBlocked" = $1 WHERE id = $2`, [isBlocked ? 1 : 0, req.params.id]);
-    pusher.trigger('mandi-global', 'user-blocked-status-changed', { id: req.params.id, isBlocked: isBlocked ? 1 : 0 });
+    await pusher.trigger('mandi-global', 'user-blocked-status-changed', { id: req.params.id, isBlocked: isBlocked ? 1 : 0 });
     res.json({ success: true });
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -328,7 +328,7 @@ app.delete('/api/admin/users/:id', adminAuth, async (req, res) => {
     await db.query(`DELETE FROM listings WHERE "sellerId" = $1`, [req.params.id]);
     await db.query(`DELETE FROM users WHERE id = $1`, [req.params.id]);
 
-    pusher.trigger('mandi-global', 'listing-updated', { forceRefresh: true });
+    await pusher.trigger('mandi-global', 'listing-updated', { forceRefresh: true });
     res.json({ success: true });
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -350,7 +350,7 @@ app.delete('/api/admin/listings/:id', adminAuth, async (req, res) => {
     await initDB();
     await db.query(`DELETE FROM listing_images WHERE "listingId" = $1`, [req.params.id]);
     await db.query(`DELETE FROM listings WHERE id = $1`, [req.params.id]);
-    pusher.trigger('mandi-global', 'listing-updated', { id: req.params.id, status: 'deleted' });
+    await pusher.trigger('mandi-global', 'listing-updated', { id: req.params.id, status: 'deleted' });
     res.json({ success: true });
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -376,7 +376,7 @@ app.patch('/api/admin/support/:id/reply', adminAuth, async (req, res) => {
     await initDB();
     const { reply } = req.body;
     await db.query(`UPDATE support_messages SET "adminReply" = $1, "unreadAdminReply" = 1 WHERE id = $2`, [reply, req.params.id]);
-    pusher.trigger('mandi-global', 'support-ticket-updated', {}); 
+    await pusher.trigger('mandi-global', 'support-ticket-updated', {}); 
     res.json({ success: true, reply });
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -386,7 +386,7 @@ app.post('/api/support', async (req, res) => {
     await initDB();
     const { senderId, message } = req.body;
     await db.query(`INSERT INTO support_messages (id, "senderId", message, timestamp) VALUES ($1, $2, $3, $4)`, [uuidv4(), senderId, message, Date.now()]);
-    pusher.trigger('mandi-global', 'support-ticket-updated', {});
+    await pusher.trigger('mandi-global', 'support-ticket-updated', {});
     res.json({ success: true });
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });

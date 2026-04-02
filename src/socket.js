@@ -25,6 +25,10 @@ try {
 }
 
 export const socket = {
+  get id() {
+    return (pusher && pusher.connection && pusher.connection.socket_id) || null;
+  },
+  
   // Mock 'on' for compatibility
   on: (event, callback, channelName = 'mandi-global') => {
     try {
@@ -45,8 +49,11 @@ export const socket = {
   },
 
   subscribeUser: (userId, event, callback) => {
+    if (!userId) return () => {};
     try {
-      const channel = pusher.subscribe(`user-${userId.split('_')[0]}`);
+      // Split to handle compound IDs correctly
+      const prefix = userId.split('_')[0];
+      const channel = pusher.subscribe(`user-${prefix}`);
       channel.bind(event, callback);
       return () => channel.unbind(event, callback);
     } catch (e) { return () => {}; }
