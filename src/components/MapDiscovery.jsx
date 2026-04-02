@@ -1,8 +1,9 @@
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useNavigate } from 'react-router-dom';
 import { getOptimizedImage } from '../utils/image';
+import { useEffect } from 'react';
 
 // Fix Leaflet marker icons tracking
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -16,6 +17,16 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
+function MapCenteringController({ center }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center?.lat) {
+      map.setView([center.lat, center.lng], 10);
+    }
+  }, [center, map]);
+  return null;
+}
+
 export function MapDiscovery({ listings, center }) {
   const navigate = useNavigate();
   const mapCenter = center?.lat ? [center.lat, center.lng] : [20.5937, 78.9629]; // Default India
@@ -23,6 +34,7 @@ export function MapDiscovery({ listings, center }) {
   return (
     <div style={{ height: '400px', width: '100%', borderRadius: '20px', overflow: 'hidden', border: '2px solid var(--border-color)', marginBottom: '24px' }}>
       <MapContainer center={mapCenter} zoom={10} style={{ height: '100%', width: '100%' }}>
+        <MapCenteringController center={center} />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

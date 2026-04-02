@@ -447,7 +447,7 @@ export function AddListing() {
               className="input-base" 
               placeholder="Pincode"
               value={pincode}
-              onChange={(e) => setPincode(e.target.value)}
+              onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
               disabled={isSubmitting}
               required
             />
