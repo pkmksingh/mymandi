@@ -224,11 +224,8 @@ app.post('/api/listings', upload.array('images', 5), async (req, res) => {
 
 app.patch('/api/listings/:id/sold', async (req, res) => {
   try {
-    await initDB();
     const { id } = req.params;
-    console.log("Marking Sold ID:", id);
-    
-    // 1. Precise Database Update with fully quoted identifiers
+    // Precise Database Update with fully quoted identifiers
     const result = await db.query(`UPDATE listings SET "status" = 'sold' WHERE "id" = $1`, [id]);
     
     // 2. Real-time update (Optional)
