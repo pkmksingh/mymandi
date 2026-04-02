@@ -228,10 +228,10 @@ app.patch('/api/listings/:id/sold', async (req, res) => {
     const { id } = req.params;
     console.log("Marking Sold ID:", id);
     
-    // 1. Database Update (Crucial)
-    const result = await db.query(`UPDATE listings SET "status" = 'sold' WHERE id = $1`, [id]);
+    // 1. Precise Database Update with fully quoted identifiers
+    const result = await db.query(`UPDATE listings SET "status" = 'sold' WHERE "id" = $1`, [id]);
     
-    // 2. Real-time update (Optional, don't crash if it fails)
+    // 2. Real-time update (Optional)
     try {
       await pusher.trigger('mandi-global', 'listing-updated', { id, status: 'sold' });
     } catch (realTimeErr) {

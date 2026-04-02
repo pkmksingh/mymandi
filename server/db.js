@@ -87,11 +87,22 @@ export const initDB = async () => {
       -- Migration: Ensure status column exists for old databases
       ALTER TABLE listings ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'active';
     `);
-    console.log("✓ PostgreSQL Database Ready");
+    console.log("✓ PostgreSQL Tables Checked");
   } catch (err) {
-    console.error("Database initialization failed:", err);
+    console.error("Core Table initialization failed:", err);
   } finally {
     client.release();
+  }
+
+  // Independent Migration: Ensure status column exists
+  const mClient = await db.connect();
+  try {
+    await mClient.query('ALTER TABLE listings ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT \'active\'');
+    console.log("✓ Migration: Listing Status column verified");
+  } catch (mErr) {
+    console.warn("Migration Warning (status column):", mErr.message);
+  } finally {
+    mClient.release();
   }
 };
 
