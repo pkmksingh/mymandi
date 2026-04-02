@@ -7,6 +7,8 @@ export const useStore = create(
     (set, get) => ({
       deviceId: null,
       deviceToken: null,
+  language: 'en',
+  setLanguage: (lang) => set({ language: lang }),
       currentUser: null,
       deviceProfiles: [],
       deviceProfilesLoaded: false,
@@ -152,7 +154,8 @@ export const useStore = create(
       partialize: (state) => ({ 
         deviceId: state.deviceId, 
         deviceToken: state.deviceToken,
-        currentUser: state.currentUser
+        currentUser: state.currentUser,
+        language: state.language
       }),
     }
   )

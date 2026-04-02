@@ -1,13 +1,15 @@
 import { useStore } from '../store';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Phone, MessageSquare, MapPin, ChevronLeft, Calendar } from 'lucide-react';
+import { Phone, MessageSquare, MapPin, ChevronLeft, Calendar, Share2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useEffect } from 'react';
+import { translations } from '../utils/translations';
 
 export function ListingDetails() {
   const { id } = useParams();
-  const { listings, fetchListings, isLoading, startCall, currentUser, startChat } = useStore();
+  const { listings, fetchListings, isLoading, startCall, currentUser, startChat, language } = useStore();
   const navigate = useNavigate();
+  const t = translations[language] || translations.en;
 
   useEffect(() => {
     if (listings.length === 0) {
@@ -98,6 +100,16 @@ export function ListingDetails() {
               <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Meri Mandi Seller</p>
             </div>
           </div>
+          <button 
+            className="btn-secondary"
+            onClick={() => {
+              const text = `Check out this crop on Meri Mandi:\n*${listing.cropName}*\nQuantity: ${listing.quantity}\nPrice: ${listing.price}\nLocation: ${listing.nearestCity}\n\nDownload app to buy!`;
+              window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+            }}
+            style={{ padding: '10px 16px', background: '#25D366', color: 'white', border: 'none', gap: '8px', fontSize: '13px' }}
+          >
+            <Share2 size={16} /> {t.shareOnWhatsapp}
+          </button>
         </div>
       </div>
 

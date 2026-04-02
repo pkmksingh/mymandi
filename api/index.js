@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
@@ -19,8 +20,37 @@ try {
 }
 
 const app = express();
-app.use(cors());
+
+// Production CORS & Security
+const allowedOrigins = [process.env.PRODUCTION_URL, 'http://localhost:5173', 'http://localhost:4173'].filter(Boolean);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Rejected by CORS Policy'));
+    }
+  }
+}));
 app.use(express.json());
+
+// Rate Limiting
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes' }
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: 'Upload rate limit reached. Please wait a minute.' }
+});
+
+app.use('/api/', globalLimiter);
+app.use('/api/users', uploadLimiter);
+app.use('/api/listings', uploadLimiter);
+app.use('/api/signal', uploadLimiter);
 
 // Pusher Configuration
 const pusher = new Pusher({

@@ -1,17 +1,22 @@
 import { useStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { Search, MapPin, Grid, List as ListIcon, MessageSquare } from 'lucide-react';
+import { Search, MapPin, Grid, List as ListIcon, MessageSquare, Map as MapIcon, Cloud, TrendingUp, Languages } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { getOptimizedImage } from '../utils/image';
 import { SkeletonGrid } from './ListingSkeleton';
+import { MapDiscovery } from './MapDiscovery';
+import { translations } from '../utils/translations';
 
 export function BuyerDashboard() {
-  const { listings, fetchListings, isLoading, toggleInbox, unreadCount, currentUser } = useStore();
+  const { listings, fetchListings, isLoading, toggleInbox, unreadCount, currentUser, language, setLanguage } = useStore();
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState('list');
   const [displaySearch, setDisplaySearch] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showMap, setShowMap] = useState(false);
+
+  const t = translations[language] || translations.en;
 
   useEffect(() => {
     fetchListings();
@@ -59,24 +64,51 @@ export function BuyerDashboard() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
         <div>
-          <h2 style={{ fontSize: '28px', marginBottom: '8px' }}>Explore Crops</h2>
-          <p style={{ color: 'var(--text-muted)' }}>Find fresh produce directly from farmers.</p>
+          <h2 style={{ fontSize: '28px', marginBottom: '8px' }}>{t.exploreCrops}</h2>
+          <p style={{ color: 'var(--text-muted)' }}>{t.freshProduce}</p>
         </div>
-        <button 
-          onClick={toggleInbox} 
-          style={{ position: 'relative', background: 'var(--surface-light)', border: 'none', color: 'var(--primary-color)', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.2s' }}
-          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-        >
-          <MessageSquare size={24} />
-          {unreadCount > 0 && (
-            <div style={{ position: 'absolute', top: '8px', right: '8px', background: 'var(--danger-color)', color: 'white', fontSize: '10px', fontWeight: 'bold', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--surface-light)' }}>
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </div>
-          )}
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <select 
+            value={language} 
+            onChange={(e) => setLanguage(e.target.value)}
+            style={{ background: 'var(--surface-light)', border: 'none', color: '#f8fafc', borderRadius: '12px', padding: '0 12px', fontSize: '13px' }}
+          >
+            <option value="en">English</option>
+            <option value="hi">हिन्दी</option>
+            <option value="pa">ਪੰਜਾਬੀ</option>
+          </select>
+          <button 
+            onClick={toggleInbox} 
+            style={{ position: 'relative', background: 'var(--surface-light)', border: 'none', color: 'var(--primary-color)', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.2s' }}
+          >
+            <MessageSquare size={24} />
+            {unreadCount > 0 && (
+              <div style={{ position: 'absolute', top: '8px', right: '8px', background: 'var(--danger-color)', color: 'white', fontSize: '10px', fontWeight: 'bold', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--surface-light)' }}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </div>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Mandi Widget */}
+      <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '16px', marginBottom: '8px', scrollbarWidth: 'none' }}>
+        <div className="glass-panel" style={{ padding: '12px 16px', minWidth: '160px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Cloud color="#38bdf8" size={24} />
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t.weather}</div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold' }}>32°C Sunny</div>
+          </div>
+        </div>
+        <div className="glass-panel" style={{ padding: '12px 16px', minWidth: '160px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <TrendingUp color="#10b981" size={24} />
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t.mandiPrice} (Wheat)</div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold' }}>₹2,275/Qtl</div>
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
@@ -85,7 +117,7 @@ export function BuyerDashboard() {
           <input 
             type="text" 
             className="input-base" 
-            placeholder="Search crops or farmers..."
+            placeholder={t.searchPlaceholder}
             value={displaySearch}
             onChange={(e) => setDisplaySearch(e.target.value)}
             style={{ paddingLeft: '48px', borderRadius: '14px', background: 'var(--surface-light)' }}
@@ -94,22 +126,31 @@ export function BuyerDashboard() {
         <div style={{ display: 'flex', background: 'var(--surface-light)', borderRadius: '14px', padding: '4px' }}>
           <button 
             className="btn-icon-circular" 
-            onClick={() => setViewMode('grid')}
-            style={{ width: '40px', height: '40px', background: viewMode === 'grid' ? 'var(--bg-color)' : 'transparent', borderRadius: '10px' }}
+            onClick={() => setShowMap(!showMap)}
+            style={{ width: '40px', height: '40px', background: showMap ? 'var(--primary-glow)' : 'transparent', borderRadius: '10px' }}
           >
-            <Grid size={18} color={viewMode === 'grid' ? '#10b981' : '#f8fafc'} />
+            <MapIcon size={18} color={showMap ? '#10b981' : '#f8fafc'} />
           </button>
           <button 
             className="btn-icon-circular" 
-            onClick={() => setViewMode('list')}
-            style={{ width: '40px', height: '40px', background: viewMode === 'list' ? 'var(--bg-color)' : 'transparent', borderRadius: '10px' }}
+            onClick={() => { setViewMode('grid'); setShowMap(false); }}
+            style={{ width: '40px', height: '40px', background: !showMap && viewMode === 'grid' ? 'var(--bg-color)' : 'transparent', borderRadius: '10px' }}
           >
-            <ListIcon size={18} color={viewMode === 'list' ? '#10b981' : '#f8fafc'} />
+            <Grid size={18} color={!showMap && viewMode === 'grid' ? '#10b981' : '#f8fafc'} />
+          </button>
+          <button 
+            className="btn-icon-circular" 
+            onClick={() => { setViewMode('list'); setShowMap(false); }}
+            style={{ width: '40px', height: '40px', background: !showMap && viewMode === 'list' ? 'var(--bg-color)' : 'transparent', borderRadius: '10px' }}
+          >
+            <ListIcon size={18} color={!showMap && viewMode === 'list' ? '#10b981' : '#f8fafc'} />
           </button>
         </div>
       </div>
 
-      {isLoading && listings.length === 0 ? (
+      {showMap ? (
+        <MapDiscovery listings={filteredListings} center={currentUser?.location} />
+      ) : isLoading && listings.length === 0 ? (
         <SkeletonGrid />
       ) : (
         <AnimatePresence>

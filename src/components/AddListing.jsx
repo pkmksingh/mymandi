@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { Camera, MapPin, X, Loader2, Check } from 'lucide-react';
+import { Camera, MapPin, X, Loader2, Check, Mic, MicOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CameraCapture } from './CameraCapture';
 import { INDIA_DATA } from '../data/india-data';
@@ -34,6 +34,24 @@ export function AddListing() {
 
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+
+  const startVoiceInput = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice input is not supported in this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = language === 'hi' ? 'hi-IN' : (language === 'pa' ? 'pa-IN' : 'en-IN');
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setCropName(transcript);
+    };
+    recognition.start();
+  };
 
   const handleCapture = (file, dataUrl) => {
     if (imageFiles.length >= 5) {
@@ -170,15 +188,30 @@ export function AddListing() {
       <form onSubmit={handleSubmit} className="glass-panel" style={{ padding: '24px' }}>
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Crop Name</label>
-          <input 
-            type="text" 
-            className="input-base" 
-            placeholder="e.g. Organic Tomatoes"
-            value={cropName}
-            onChange={(e) => setCropName(e.target.value)}
-            required
-            disabled={isSubmitting}
-          />
+          <div style={{ position: 'relative' }}>
+            <input 
+              type="text" 
+              className="input-base" 
+              placeholder="e.g. Organic Tomatoes"
+              value={cropName}
+              onChange={(e) => setCropName(e.target.value)}
+              required
+              disabled={isSubmitting}
+              style={{ paddingRight: '48px' }}
+            />
+            <button 
+              type="button"
+              onClick={startVoiceInput}
+              style={{ 
+                position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
+                background: isListening ? 'var(--danger-color)' : 'var(--surface-light)',
+                border: 'none', borderRadius: '10px', width: '32px', height: '32px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+              }}
+            >
+              {isListening ? <Mic size={16} color="white" className="animate-pulse" /> : <Mic size={16} color="var(--primary-color)" />}
+            </button>
+          </div>
         </div>
 
         <div style={{ marginBottom: '20px' }}>
