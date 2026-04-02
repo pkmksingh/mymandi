@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { MessageSquare, X, Send } from 'lucide-react';
 import { useStore } from '../store';
 import { motion, AnimatePresence } from 'framer-motion';
+import { socket } from '../socket';
 
 export function HelpOverlay() {
   const [isOpen, setIsOpen] = useState(false);
