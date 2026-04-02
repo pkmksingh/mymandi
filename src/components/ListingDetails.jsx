@@ -64,18 +64,6 @@ export function ListingDetails() {
           {listing.price || 'Contact for price'}
         </p>
 
-        {/* Repositioned WhatsApp Share Button */}
-        <button 
-          className="btn-secondary"
-          onClick={() => {
-            const text = `Check out this crop on Meri Mandi:\n*${listing.cropName}*\nQuantity: ${listing.quantity}\nPrice: ${listing.price}\nLocation: ${listing.nearestCity}\n\nDownload app to buy!`;
-            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-          }}
-          style={{ width: '100%', marginBottom: '24px', background: '#25D366', color: 'white', border: 'none', gap: '8px' }}
-        >
-          <Share2 size={16} /> {t.shareOnWhatsapp}
-        </button>
-
         <div className="glass-panel" style={{ padding: '20px', display: 'grid', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--surface-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
