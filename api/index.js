@@ -18,10 +18,11 @@ const getTF = async () => null;
 const app = express();
 
 // Production CORS & Security
-const allowedOrigins = [process.env.PRODUCTION_URL, 'http://localhost:5173', 'http://localhost:4173'].filter(Boolean);
+// Production CORS & Security
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    // Allow same-origin and localhost
+    if (!origin || origin.includes('localhost') || origin.includes('vercel.app')) {
       callback(null, true);
     } else {
       callback(new Error('Rejected by CORS Policy'));
