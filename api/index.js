@@ -226,10 +226,23 @@ app.patch('/api/listings/:id/sold', async (req, res) => {
   try {
     await initDB();
     const { id } = req.params;
-    await db.query(`UPDATE listings SET "status" = 'sold' WHERE id = $1`, [id]);
-    await pusher.trigger('mandi-global', 'listing-updated', { id, status: 'sold' });
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+    console.log("Marking Sold ID:", id);
+    
+    // 1. Database Update (Crucial)
+    const result = await db.query(`UPDATE listings SET "status" = 'sold' WHERE id = $1`, [id]);
+    
+    // 2. Real-time update (Optional, don't crash if it fails)
+    try {
+      await pusher.trigger('mandi-global', 'listing-updated', { id, status: 'sold' });
+    } catch (realTimeErr) {
+      console.warn("Pusher failed during Mark Sold notification:", realTimeErr.message);
+    }
+
+    res.json({ success: true, updated: result.rowCount > 0 });
+  } catch (err) { 
+    console.error("FAILED to mark as sold:", err);
+    res.status(500).json({ error: 'Failed', details: err.message }); 
+  }
 });
 
 app.patch('/api/listings/:id/edit', async (req, res) => {

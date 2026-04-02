@@ -106,12 +106,15 @@ export const useStore = create(
 
         try {
           const res = await fetch(`/api/listings/${id}/sold`, { method: 'PATCH' });
-          if (!res.ok) throw new Error("Failed to update");
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.details || "Server error");
+          }
         } catch (err) {
           console.error(err);
           // Rollback on error
           set({ listings: oldListings });
-          alert("Failed to mark as sold. Please try again.");
+          alert(`Failed to mark as sold: ${err.message}`);
         }
       },
 
