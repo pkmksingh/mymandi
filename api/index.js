@@ -28,6 +28,7 @@ if (process.env.VITE_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 const getTF = async () => null;
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Production CORS & Security
 // Production CORS & Security
@@ -112,7 +113,7 @@ app.post('/api/auth/google', async (req, res) => {
   try {
     await initDB();
     const { credential } = req.body;
-    const ticket = await client.verifyIdToken({
+    const ticket = await googleClient.verifyIdToken({
       idToken: credential,
       audience: process.env.VITE_GOOGLE_CLIENT_ID,
     });
