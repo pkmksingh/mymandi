@@ -167,6 +167,7 @@ export function Auth() {
       if (!res.ok) throw new Error(data.error || 'Registration failed.');
       
       login(data);
+      alert(language === 'hi' ? 'सफलता! आपके खरीदार और विक्रेता दोनों प्रोफाइल तैयार हैं।' : (language === 'pa' ? 'ਸਫਲਤਾ! ਤੁਹਾਡੇ ਖਰੀਦਦਾਰ ਅਤੇ ਵਿਕਰੇਤਾ ਦੋਵੇਂ ਪ੍ਰੋਫਾਈਲ ਤਿਆਰ ਹਨ।' : 'Success! Both your Buyer and Seller profiles are now ready.'));
       navigate(role === 'buyer' ? '/buyer' : '/seller');
     } catch (err) {
       console.error(err);

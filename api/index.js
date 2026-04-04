@@ -191,6 +191,7 @@ app.post('/api/users', upload.single('selfie'), async (req, res) => {
     // Check if THIS specific role already exists for this email
     const { rows: phoneCheck } = await db.query('SELECT id FROM users WHERE contact = $1 AND role = $2', [contact, role]);
     if (phoneCheck.length > 0 && phoneCheck[0].id !== compoundId) {
+      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
       return res.status(400).json({ error: 'Phone number already registered with another profile.' });
     }
 
@@ -210,9 +211,37 @@ app.post('/api/users', upload.single('selfie'), async (req, res) => {
       `, [name, selfiePath, nearestCity, district, state, pincode, location, contact, picture, compoundId]);
     }
 
-    res.json({ id: compoundId, googleId, email, name, role, contact, nearestCity, district, state, pincode, location: JSON.parse(location), selfiePath, picture });
+    // 🛡️ Dual-Profile Synchronizer: Automatically create/update the complementary role
+    const otherRole = role === 'seller' ? 'buyer' : 'seller';
+    const otherCompoundId = `${googleId}_${otherRole}`;
+    
+    // Check if the other profile exists
+    const { rows: otherExisting } = await db.query('SELECT id FROM users WHERE id = $1', [otherCompoundId]);
+    
+    if (otherExisting.length === 0) {
+      // Auto-generate the second profile
+      await db.query(`
+        INSERT INTO users (id, name, role, "selfiePath", contact, "nearestCity", district, state, pincode, location, "googleId", email, picture) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `, [otherCompoundId, name, otherRole, selfiePath, contact, nearestCity, district, state, pincode, location, googleId, email, picture]);
+    } else {
+      // Keep it in sync
+      await db.query(`
+        UPDATE users SET name = $1, "selfiePath" = $2, "nearestCity" = $3, district = $4, state = $5, pincode = $6, location = $7, contact = $8, picture = $9
+        WHERE id = $10
+      `, [name, selfiePath, nearestCity, district, state, pincode, location, contact, picture, otherCompoundId]);
+    }
+
+    // Fetch the primary profile to return to the frontend
+    const { rows: [primaryProfile] } = await db.query('SELECT * FROM users WHERE id = $1', [compoundId]);
+    
+    res.json({
+      ...primaryProfile,
+      location: primaryProfile.location ? JSON.parse(primaryProfile.location) : null
+    });
   } catch (err) {
     console.error(err);
+    if (req.file) await cloudinary.uploader.destroy(req.file.filename).catch(() => {});
     res.status(500).json({ error: 'Registration failed.' });
   }
 });

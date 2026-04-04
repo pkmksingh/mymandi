@@ -95,32 +95,47 @@ export const initDB = async () => {
         FOREIGN KEY ("userId") REFERENCES users("id") ON DELETE CASCADE
       );
 
-      -- Migration: Ensure columns exist without strict uniqueness (compound ID handles uniqueness)
+      -- Migration: Ensure columns exist
       ALTER TABLE listings ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'active';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS "email" TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS "googleId" TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS "picture" TEXT;
-      
-      -- If they were already added with UNIQUE, we need to drop them to allow multi-role
-      -- Constraint names can vary, so we check and drop common ones
-      DO $$ 
-      BEGIN 
-        -- Drop constraints
-        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key;
-        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_googleId_key;
-        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_unique;
-        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_googleId_unique;
-        
-        -- Drop indices just in case they were created as separate unique indices
-        DROP INDEX IF EXISTS users_email_key;
-        DROP INDEX IF EXISTS users_googleId_key;
-        DROP INDEX IF EXISTS users_email_unique;
-        DROP INDEX IF EXISTS users_googleId_unique;
-      EXCEPTION WHEN others THEN 
-        NULL; 
-      END $$;
     `);
-    console.log("✓ PostgreSQL Tables Checked");
+    
+    // 🛡️ Nuclear Constraint Cleanup: Dynamic removal of all UNIQUE constraints/indexes
+    // This ensures multi-role support regardless of what names PostgreSQL gave the constraints.
+    try {
+      await client.query(`
+        DO $$ 
+        DECLARE 
+          r RECORD;
+        BEGIN 
+          -- 1. Drop all UNIQUE constraints on the users table
+          FOR r IN (
+            SELECT conname 
+            FROM pg_constraint con 
+            JOIN pg_class rel ON rel.oid = con.conrelid 
+            WHERE rel.relname = 'users' AND con.contype = 'u'
+          ) LOOP 
+            EXECUTE 'ALTER TABLE users DROP CONSTRAINT IF EXISTS ' || quote_ident(r.conname) || ' CASCADE'; 
+          END LOOP; 
+
+          -- 2. Drop all UNIQUE indexes on the users table (specifically targeting googleId/email)
+          FOR r IN (
+            SELECT indexname 
+            FROM pg_indexes 
+            WHERE tablename = 'users' AND indexdef LIKE '%UNIQUE%' AND (indexdef LIKE '%googleId%' OR indexdef LIKE '%email%')
+          ) LOOP 
+            EXECUTE 'DROP INDEX IF EXISTS ' || quote_ident(r.indexname) || ' CASCADE'; 
+          END LOOP; 
+        END $$;
+      `);
+      console.log("✓ Dynamic Migration: All unique constraints/indexes on identity columns cleared.");
+    } catch (migErr) {
+      console.warn("⚠️ Dynamic Migration Warning:", migErr.message);
+    }
+
+    console.log("✓ PostgreSQL Tables & Constraints Audited");
   } catch (err) {
     console.error("Core Table initialization failed:", err);
   } finally {
