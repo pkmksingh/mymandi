@@ -5,15 +5,20 @@ import './index.css';
 import { BrowserRouter } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+import { GoogleOAuthProvider } from '@react-oauth/google';
+
 const rootElement = document.getElementById('root');
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 if (rootElement) {
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </GoogleOAuthProvider>
       </ErrorBoundary>
     </React.StrictMode>
   );

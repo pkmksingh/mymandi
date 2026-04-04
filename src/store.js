@@ -5,63 +5,47 @@ import { v4 as uuidv4 } from 'uuid';
 export const useStore = create(
   persist(
     (set, get) => ({
-      deviceId: null,
-      deviceToken: null,
-  language: 'en',
-  setLanguage: (lang) => set({ language: lang }),
+      googleUser: null,
+      deviceProfiles: [], // Renamed to googleProfiles in logic but keeping name for compatibility or renaming
+      profilesLoaded: false,
+      language: 'en',
+      setLanguage: (lang) => set({ language: lang }),
       currentUser: null,
-      deviceProfiles: [],
-      deviceProfilesLoaded: false,
-      users: [],
-      listings: [], // Now fetched from backend
-      messages: [],
-      activeCall: null,
-      missedCalls: 0,
       isLoading: false,
 
-      initDevice: () => {
-        let id = get().deviceId;
-        let token = get().deviceToken;
-        if (!id) {
-          id = uuidv4();
-          token = uuidv4(); // Unique secret for this device
-          set({ deviceId: id, deviceToken: token });
+      setGoogleUser: (user) => {
+        set({ googleUser: user });
+        if (user) {
+          get().fetchProfiles(user.googleId);
+        } else {
+          set({ deviceProfiles: [], currentUser: null });
         }
-        get().fetchDeviceProfiles(id, token);
-        return { deviceId: id, deviceToken: token };
       },
 
-      fetchDeviceProfiles: async (deviceId, deviceToken) => {
+      fetchProfiles: async (googleId) => {
         try {
-          const id = deviceId || get().deviceId;
-          const token = deviceToken || get().deviceToken;
-          
+          const id = googleId || (get().googleUser?.googleId);
           if (!id) return;
 
-          const res = await fetch(`/api/users/device/${id}`, {
-            headers: { 'x-device-token': token || '' }
-          });
-          
+          const res = await fetch(`/api/users/google/${id}`);
           if (res.ok) {
             const profiles = await res.json();
-            set({ deviceProfiles: profiles, deviceProfilesLoaded: true });
+            set({ deviceProfiles: profiles, profilesLoaded: true });
           } else {
-            set({ deviceProfilesLoaded: true });
+            set({ profilesLoaded: true });
           }
         } catch (err) {
           console.error(err);
-          set({ deviceProfilesLoaded: true });
+          set({ profilesLoaded: true });
         }
       },
 
       login: (userRecord) => {
         set({ currentUser: userRecord });
-        get().fetchDeviceProfiles(get().deviceId, get().deviceToken);
       },
 
       logout: () => {
-        set({ currentUser: null });
-        if (get().deviceId) get().fetchDeviceProfiles(get().deviceId, get().deviceToken);
+        set({ googleUser: null, currentUser: null, deviceProfiles: [] });
       },
 
       // Messaging State
@@ -164,8 +148,7 @@ export const useStore = create(
     {
       name: 'mandi-storage',
       partialize: (state) => ({ 
-        deviceId: state.deviceId, 
-        deviceToken: state.deviceToken,
+        googleUser: state.googleUser,
         currentUser: state.currentUser,
         language: state.language
       }),

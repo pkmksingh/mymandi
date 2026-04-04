@@ -26,7 +26,7 @@ const LoadingFallback = () => (
 );
 
 export default function App() {
-  const { currentUser, initDevice, logout } = useStore();
+  const { currentUser, logout } = useStore();
   const [showQR, setShowQR] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,8 +36,6 @@ export default function App() {
     if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
       Notification.requestPermission();
     }
-
-    const { deviceId } = initDevice();
     
     // Global Channel Listeners
     const unsubUpdate = socket.on('listing-updated', (data) => {
@@ -70,11 +68,8 @@ export default function App() {
     }
 
     return () => {
-      unsubUpdate();
-      unsubEdit();
-      unsubMessage();
     }
-  }, [initDevice, currentUser]);
+  }, [currentUser]);
 
   useEffect(() => {
     if (currentUser) {

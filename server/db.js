@@ -36,6 +36,9 @@ export const initDB = async () => {
         "nearestCity" TEXT DEFAULT '',
         "deviceId" TEXT,
         "deviceToken" TEXT,
+        "email" TEXT UNIQUE,
+        "googleId" TEXT UNIQUE,
+        "picture" TEXT,
         "isBlocked" INTEGER DEFAULT 0
       );
 
@@ -86,6 +89,9 @@ export const initDB = async () => {
 
       -- Migration: Ensure status column exists for old databases
       ALTER TABLE listings ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'active';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS "email" TEXT UNIQUE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS "googleId" TEXT UNIQUE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS "picture" TEXT;
     `);
     console.log("✓ PostgreSQL Tables Checked");
   } catch (err) {

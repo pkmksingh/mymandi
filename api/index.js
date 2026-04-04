@@ -11,6 +11,9 @@ import Pusher from 'pusher';
 import db, { initDB } from '../server/db.js';
 import * as nsfwjs from 'nsfwjs';
 import sharp from 'sharp';
+import { OAuth2Client } from 'google-auth-library';
+
+const client = new OAuth2Client(process.env.VITE_GOOGLE_CLIENT_ID);
 
 // Temporarily disabling heavy AI imports for production reliability
 const getTF = async () => null;
@@ -94,65 +97,105 @@ const checkInappropriate = async (imageUrl) => {
     return false;
 };
 
+// --- AUTH ROUTES ---
+
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    await initDB();
+    const { credential } = req.body;
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.VITE_GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name, picture } = payload;
+
+    // Check if user exists by googleId OR email (to link previous email-only accounts)
+    const { rows } = await db.query('SELECT * FROM users WHERE "googleId" = $1 OR email = $2', [googleId, email]);
+    const user = rows[0];
+
+    if (user) {
+      // Just in case they had email but no googleId
+      if (!user.googleId) {
+        await db.query('UPDATE users SET "googleId" = $1, picture = $2 WHERE email = $3', [googleId, picture, email]);
+      }
+      return res.json({ registered: true, user: { ...user, location: user.location ? JSON.parse(user.location) : null } });
+    }
+
+    res.json({ registered: false, payload: { googleId, email, name, picture } });
+  } catch (err) { 
+    console.error(err);
+    res.status(401).json({ error: 'Google authentication failed' }); 
+  }
+});
+
 // --- API ROUTES ---
 
 app.post('/api/users', upload.single('selfie'), async (req, res) => {
   try {
     await initDB();
-    const { id: deviceId, deviceToken, name, role, contact, nearestCity, district, state, pincode, location } = req.body;
-    if (!deviceId || !name || !role || !contact || !nearestCity || !district || !state || !pincode || !location || !req.file) {
+    const { googleId, email, picture, name, role, contact, nearestCity, district, state, pincode, location } = req.body;
+    
+    if (!googleId || !email || !name || !role || !contact || !nearestCity || !district || !state || !pincode || !location || !req.file) {
       if (req.file) await cloudinary.uploader.destroy(req.file.filename);
-      return res.status(400).json({ error: 'Missing required fields, location or selfie.' });
+      return res.status(400).json({ error: 'Missing required profile fields.' });
     }
 
     const isInappropriate = await checkInappropriate(req.file.path);
     if (isInappropriate) {
       await cloudinary.uploader.destroy(req.file.filename);
-      return res.status(400).json({ error: 'Snapshot rejected: Inappropriate content detected.' });
+      return res.status(400).json({ error: 'Snapshot rejected: Inappropriate content.' });
     }
 
-    const { rows: matches } = await db.query(`
-      SELECT * FROM users 
-      WHERE contact = $1 AND role = $2 AND name = $3 AND state = $4 AND district = $5 AND pincode = $6
-    `, [contact, role, name, state, district, pincode]);
-    const existingProfile = matches[0];
-
-    const compoundId = existingProfile ? existingProfile.id : `${deviceId}_${role}`;
+    // Since Google is mandatory, the ID is googleId + role
+    const compoundId = `${googleId}_${role}`;
     const selfiePath = req.file.path;
 
-    if (!existingProfile) {
-      const { rows: phoneCheck } = await db.query(`SELECT id FROM users WHERE contact = $1 AND role = $2`, [contact, role]);
-      if (phoneCheck.length > 0) {
-         return res.status(400).json({ error: 'A profile with this phone number exists. Verify details to restore.' });
-      }
-      await db.query(`
-        INSERT INTO users (id, name, role, "selfiePath", contact, "nearestCity", district, state, pincode, location, "deviceId", "deviceToken") 
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      `, [compoundId, name, role, selfiePath, contact, nearestCity, district, state, pincode, location, deviceId, deviceToken]);
-    } else {
-      if (existingProfile.isBlocked) return res.status(403).json({ error: 'Account blocked.' });
-      await db.query(`
-        UPDATE users SET name = $1, "selfiePath" = $2, "nearestCity" = $3, district = $4, state = $5, pincode = $6, location = $7, "deviceId" = $8, "deviceToken" = $9 
-        WHERE id = $10
-      `, [name, selfiePath, nearestCity, district, state, pincode, location, deviceId, deviceToken, compoundId]);
+    // Check if THIS specific role already exists for this email
+    const { rows: phoneCheck } = await db.query('SELECT id FROM users WHERE contact = $1 AND role = $2', [contact, role]);
+    if (phoneCheck.length > 0 && phoneCheck[0].id !== compoundId) {
+      return res.status(400).json({ error: 'Phone number already registered with another profile.' });
     }
 
-    res.json({ id: compoundId, deviceId, name, role, contact, nearestCity, district, state, pincode, location: JSON.parse(location), selfiePath, isBlocked: existingProfile ? existingProfile.isBlocked : 0 });
+    // Create or update
+    const { rows: existing } = await db.query('SELECT * FROM users WHERE id = $1', [compoundId]);
+    
+    if (existing.length === 0) {
+      await db.query(`
+        INSERT INTO users (id, name, role, "selfiePath", contact, "nearestCity", district, state, pincode, location, "googleId", email, picture) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `, [compoundId, name, role, selfiePath, contact, nearestCity, district, state, pincode, location, googleId, email, picture]);
+    } else {
+      if (existing[0].isBlocked) return res.status(403).json({ error: 'Account blocked.' });
+      await db.query(`
+        UPDATE users SET name = $1, "selfiePath" = $2, "nearestCity" = $3, district = $4, state = $5, pincode = $6, location = $7, contact = $8, picture = $9
+        WHERE id = $10
+      `, [name, selfiePath, nearestCity, district, state, pincode, location, contact, picture, compoundId]);
+    }
+
+    res.json({ id: compoundId, googleId, email, name, role, contact, nearestCity, district, state, pincode, location: JSON.parse(location), selfiePath, picture });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Registration failed.' });
   }
 });
 
-app.get('/api/users/device/:deviceId', async (req, res) => {
+app.get('/api/users/google/:googleId', async (req, res) => {
   try {
     await initDB();
-    const { deviceId } = req.params;
-    const token = req.headers['x-device-token'];
-    const { rows: profiles } = await db.query(`SELECT * FROM users WHERE "deviceId" = $1 OR id LIKE $2`, [deviceId, `${deviceId}_%`]);
-    const validProfiles = profiles.filter(p => !p.deviceToken || p.deviceToken === token);
-    res.json(validProfiles);
-  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+    const { googleId } = req.params;
+    const { rows: profiles } = await db.query('SELECT * FROM users WHERE "googleId" = $1', [googleId]);
+    
+    const formattedProfiles = profiles.map(p => ({
+      ...p,
+      location: p.location ? JSON.parse(p.location) : null
+    }));
+    
+    res.json(formattedProfiles);
+  } catch (err) { 
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch profiles.' }); 
+  }
 });
 
 app.get('/api/listings', async (req, res) => {

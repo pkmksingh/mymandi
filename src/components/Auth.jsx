@@ -5,12 +5,14 @@ import { Leaf, Store, User, Camera, Loader2, X, MapPin, Check } from 'lucide-rea
 import { motion, AnimatePresence } from 'framer-motion';
 import { CameraCapture } from './CameraCapture';
 import { INDIA_DATA } from '../data/india-data';
+import { GoogleLogin } from '@react-oauth/google';
 
 const INDIAN_STATES = Object.keys(INDIA_DATA);
 
 export function Auth() {
-  const { login, deviceId, initDevice, deviceProfiles, deviceProfilesLoaded } = useStore();
+  const { login, googleUser, setGoogleUser, deviceProfiles, profilesLoaded } = useStore();
   const navigate = useNavigate();
+  
   const [name, setName] = useState('');
   const [contact, setContact] = useState('');
   const [nearestCity, setNearestCity] = useState('');
@@ -35,12 +37,39 @@ export function Auth() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Safely init device id after mount to avoid "Update during Render" crash
+  // Fetch profiles when google user is available
   useEffect(() => {
-    if (!deviceId) {
-      initDevice();
+    if (googleUser && !profilesLoaded) {
+      useStore.getState().fetchProfiles(googleUser.googleId);
     }
-  }, [deviceId, initDevice]);
+  }, [googleUser, profilesLoaded]);
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      setIsSubmitting(true);
+      setError('');
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: credentialResponse.credential })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Identity verification failed.');
+
+      if (data.registered) {
+        setGoogleUser(data.user);
+        // Profiles will be fetched by the useEffect
+      } else {
+        // Not registered, set the payload and pre-fill name
+        setGoogleUser(data.payload);
+        setName(data.payload.name || '');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const removeImage = () => {
     setSelfieFile(null);
@@ -115,11 +144,10 @@ export function Auth() {
     setError('');
 
     try {
-      const { deviceId: currentDeviceId, deviceToken } = deviceId ? { deviceId, deviceToken: useStore.getState().deviceToken } : initDevice();
-
       const formData = new FormData();
-      formData.append('id', currentDeviceId);
-      formData.append('deviceToken', deviceToken);
+      formData.append('googleId', googleUser.googleId);
+      formData.append('email', googleUser.email);
+      formData.append('picture', googleUser.picture);
       formData.append('name', name);
       formData.append('contact', contact);
       formData.append('role', role);
@@ -136,17 +164,9 @@ export function Auth() {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to register identity.');
-      }
+      if (!res.ok) throw new Error(data.error || 'Registration failed.');
       
-      console.log('REGISTRATION SUCCESS:', data);
-      console.log('NAVIGATING TO:', (role === 'buyer' ? '/buyer' : '/seller'));
-      
-      // Zustand handles our local user binding
       login(data);
-      
       navigate(role === 'buyer' ? '/buyer' : '/seller');
     } catch (err) {
       console.error(err);
@@ -161,13 +181,51 @@ export function Auth() {
     navigate(profile.role === 'buyer' ? '/buyer' : '/seller');
   };
 
-  const hasProfiles = deviceProfilesLoaded && deviceProfiles.length > 0;
+  const hasProfiles = profilesLoaded && deviceProfiles.length > 0;
   const isCreatingNew = !hasProfiles || isCreating;
 
   const hasBuyer = deviceProfiles.some(p => p.role === 'buyer');
   const hasSeller = deviceProfiles.some(p => p.role === 'seller');
 
-  if (!deviceProfilesLoaded) {
+  if (!googleUser) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          <div style={{
+            width: '80px', height: '80px', borderRadius: '28px',
+            background: 'linear-gradient(135deg, #10b981, #059669)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 20px',
+            boxShadow: '0 12px 40px rgba(16, 185, 129, 0.4)'
+          }}>
+            <Leaf size={40} color="white" />
+          </div>
+          <h1 style={{ fontSize: '32px', marginBottom: '12px' }}>Meri Mandi</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '18px' }}>Sign in to continue</p>
+        </div>
+
+        <GoogleLogin
+          onSuccess={handleGoogleSuccess}
+          onError={() => setError('Google Sign-In failed. Please try again.')}
+          useOneTap
+          theme="filled_black"
+          shape="pill"
+          size="large"
+          width="300"
+        />
+
+        {error && (
+          <p style={{ color: 'var(--danger-color)', marginTop: '20px', fontSize: '14px' }}>{error}</p>
+        )}
+      </motion.div>
+    );
+  }
+
+  if (!profilesLoaded && googleUser?.googleId) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <Loader2 className="animate-spin" size={32} color="var(--primary-color)" />
