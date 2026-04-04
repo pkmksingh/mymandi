@@ -19,7 +19,7 @@ const db = new Pool({
 
 export const initDB = async () => {
   if (!connectionString) return;
-  console.log("Initializing PostgreSQL Tables...");
+  console.log("🚀 [v2.1] Initializing PostgreSQL Tables & Hardening Constraints...");
   const client = await db.connect();
   try {
     await client.query(`
@@ -103,14 +103,18 @@ export const initDB = async () => {
     `);
     
     // 🛡️ Nuclear Constraint Cleanup: Dynamic removal of all UNIQUE constraints/indexes
-    // This ensures multi-role support regardless of what names PostgreSQL gave the constraints.
     try {
+      // First: Targeted brute-force strike on the known problematic constraint
+      await client.query('ALTER TABLE users DROP CONSTRAINT IF EXISTS "users_googleId_key" CASCADE');
+      await client.query('ALTER TABLE users DROP CONSTRAINT IF EXISTS "users_email_key" CASCADE');
+      
+      // Second: Dynamic discovery loop (Catch-all for any other unique constraints)
       await client.query(`
         DO $$ 
         DECLARE 
           r RECORD;
         BEGIN 
-          -- 1. Drop all UNIQUE constraints on the users table
+          -- 1. Drop all UNIQUE constraints on identity columns
           FOR r IN (
             SELECT conname 
             FROM pg_constraint con 
@@ -120,7 +124,7 @@ export const initDB = async () => {
             EXECUTE 'ALTER TABLE users DROP CONSTRAINT IF EXISTS ' || quote_ident(r.conname) || ' CASCADE'; 
           END LOOP; 
 
-          -- 2. Drop all UNIQUE indexes on the users table (specifically targeting googleId/email)
+          -- 2. Drop all UNIQUE indexes targeting identity columns
           FOR r IN (
             SELECT indexname 
             FROM pg_indexes 
@@ -130,12 +134,12 @@ export const initDB = async () => {
           END LOOP; 
         END $$;
       `);
-      console.log("✓ Dynamic Migration: All unique constraints/indexes on identity columns cleared.");
+      console.log("✅ [v2.1] Migration Success: Database unique constraints unlocked.");
     } catch (migErr) {
-      console.warn("⚠️ Dynamic Migration Warning:", migErr.message);
+      console.error("❌ [v2.1] Migration Error:", migErr.message);
     }
 
-    console.log("✓ PostgreSQL Tables & Constraints Audited");
+    console.log("✓ [v2.1] PostgreSQL Audit Complete");
   } catch (err) {
     console.error("Core Table initialization failed:", err);
   } finally {
