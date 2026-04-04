@@ -26,6 +26,7 @@ export const useStore = create(
           get().fetchProfiles(user.googleId);
         } else {
           set({ deviceProfiles: [], currentUser: null });
+          set({ deviceProfiles: [], currentUser: null, profilesLoaded: false });
         }
       },
 
@@ -52,7 +53,7 @@ export const useStore = create(
       },
 
       logout: () => {
-        set({ googleUser: null, currentUser: null, deviceProfiles: [] });
+        set({ googleUser: null, currentUser: null, deviceProfiles: [], profilesLoaded: false });
       },
 
       // Messaging State
@@ -131,21 +132,30 @@ export const useStore = create(
         }));
       },
 
-      startCall: (receiverId, receiverName, receiverSelfie) => {
-        const user = get().currentUser;
-        if (!user) return;
-        set({
-          activeCall: {
-            callerId: user.id,
-            callerName: user.name,
-            callerSelfie: user.selfiePath,
-            receiverId,
-            receiverName,
-            receiverSelfie,
-            status: 'ringing'
-          }
-        });
+      startCall: (data, role = 'outgoing') => {
+        if (role === 'incoming') {
+          set({ activeCall: { ...data, status: 'ringing', role: 'incoming' } });
+        } else {
+          const user = get().currentUser;
+          if (!user) return;
+          set({
+            activeCall: {
+              callerId: user.id,
+              callerName: user.name,
+              callerSelfie: user.selfiePath,
+              receiverId: data.id,
+              receiverName: data.name,
+              receiverSelfie: data.selfiePath,
+              role: 'outgoing',
+              status: 'ringing'
+            }
+          });
+        }
       },
+
+      acceptCall: () => set(state => ({
+        activeCall: state.activeCall ? { ...state.activeCall, status: 'connected' } : null
+      })),
 
       endCall: () => set({ activeCall: null })
     }),

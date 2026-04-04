@@ -65,23 +65,39 @@ export default function App() {
 
     // User-specific Channel Listeners
     let unsubMessage = () => {};
+    let unsubCall = () => {};
+    let unsubCallEnd = () => {};
+
     if (currentUser) {
       unsubMessage = socket.subscribeUser(currentUser.id, 'receive-message', (data) => {
         const state = useStore.getState();
         if (!state.activeChatUser || state.activeChatUser.id !== data.senderId) {
           state.fetchUnreadCount();
           if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("New Message - Meri Mandi", { 
+            new Notification(`Message from ${data.senderName || 'Meri Mandi'}`, { 
               body: data.message,
-              icon: '/upiqr.jpeg'
+              icon: data.senderSelfie || '/upiqr.jpeg'
             });
           }
         }
       });
+
+      unsubCall = socket.subscribeUser(currentUser.id, 'incoming-call', (data) => {
+        useStore.getState().startCall(data, 'incoming');
+      });
+
+      unsubCallEnd = socket.subscribeUser(currentUser.id, 'call-ended', () => {
+        useStore.getState().endCall();
+      });
     }
 
     return () => {
-    }
+      unsubUpdate();
+      unsubEdit();
+      unsubMessage();
+      unsubCall();
+      unsubCallEnd();
+    };
   }, [currentUser]);
 
   useEffect(() => {

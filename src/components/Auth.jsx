@@ -118,10 +118,10 @@ export function Auth() {
     e.preventDefault();
     if (!name.trim()) return;
     
-    // Validate Indian phone number format
-    const phoneRegex = /^(?:\+?91[-\s]?)?[0]?(?:91)?[6789]\d{9}$/;
+    // Validate strict 10-digit numeric only phone number
+    const phoneRegex = /^\d{10}$/;
     if (!phoneRegex.test(contact)) {
-      setError('Please enter a valid 10-digit Indian phone number.');
+      setError('Please enter a valid 10-digit numeric phone number.');
       return;
     }
 
@@ -343,9 +343,11 @@ export function Auth() {
             <input 
               type="tel" 
               className="input-base" 
-              placeholder="Enter your phone number"
+              placeholder="Enter your 10-digit number"
               value={contact}
-              onChange={(e) => setContact(e.target.value)}
+              onChange={(e) => setContact(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              maxLength="10"
+              inputMode="numeric"
               disabled={isSubmitting}
               required
             />

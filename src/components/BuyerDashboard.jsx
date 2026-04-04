@@ -51,10 +51,10 @@ export function BuyerDashboard() {
         return {
           ...l,
           distance: calculateDistance(
-            currentUser.location.lat, 
-            currentUser.location.lng, 
-            l.location.lat, 
-            l.location.lng
+            currentUser?.location?.lat, 
+            currentUser?.location?.lng, 
+            l.location?.lat, 
+            l.location?.lng
           )
         };
       }

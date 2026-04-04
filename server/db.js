@@ -36,8 +36,8 @@ export const initDB = async () => {
         "nearestCity" TEXT DEFAULT '',
         "deviceId" TEXT,
         "deviceToken" TEXT,
-        "email" TEXT UNIQUE,
-        "googleId" TEXT UNIQUE,
+        "email" TEXT,
+        "googleId" TEXT,
         "picture" TEXT,
         "isBlocked" INTEGER DEFAULT 0
       );

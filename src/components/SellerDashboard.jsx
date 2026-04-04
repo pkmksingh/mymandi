@@ -22,7 +22,7 @@ export function SellerDashboard() {
   const [editingListing, setEditingListing] = useState(null);
   const [editForm, setEditForm] = useState({ cropName: '', quantity: '', price: '' });
 
-  const myListings = listings.filter(l => l.sellerId === currentUser?.id && l.status !== 'sold');
+  const myListings = listings?.filter(l => l.sellerId === currentUser?.id && l.status !== 'sold') || [];
 
   const handleMarkSold = (e, id) => {
     e.stopPropagation();

@@ -172,6 +172,12 @@ app.post('/api/users', upload.single('selfie'), async (req, res) => {
       return res.status(400).json({ error: 'Missing required profile fields.' });
     }
 
+    // Backend validation: 10-digit numeric phone number
+    if (!/^\d{10}$/.test(contact)) {
+      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      return res.status(400).json({ error: 'Invalid contact number. Must be 10 digits.' });
+    }
+
     const isInappropriate = await checkInappropriate(req.file.path);
     if (isInappropriate) {
       await cloudinary.uploader.destroy(req.file.filename);
