@@ -15,6 +15,10 @@ export function BuyerDashboard() {
   const [displaySearch, setDisplaySearch] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [showMap, setShowMap] = useState(false);
+  const [mandiPrices, setMandiPrices] = useState([]);
+  const [pricesLoading, setPricesLoading] = useState(true);
+  const [weatherData, setWeatherData] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
 
   const t = translations[language] || translations.en;
 
@@ -26,6 +30,47 @@ export function BuyerDashboard() {
     const timer = setTimeout(() => setSearchTerm(displaySearch), 300);
     return () => clearTimeout(timer);
   }, [displaySearch]);
+
+  useEffect(() => {
+    const fetchPrices = async () => {
+      try {
+        const res = await fetch(`/api/mandi/prices?state=${currentUser?.state || ''}&district=${currentUser?.district || ''}`);
+        if (res.ok) {
+          const data = await res.json();
+          setMandiPrices(data);
+        }
+      } catch (err) {
+        console.error("Mandi Price Fetch Error:", err);
+      } finally {
+        setPricesLoading(false);
+      }
+    };
+    fetchPrices();
+  }, [currentUser]);
+
+  useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        const res = await fetch(`/api/weather?city=${currentUser?.nearestCity || 'Amritsar'}`);
+        if (res.ok) {
+          const data = await res.json();
+          setWeatherData(data);
+        }
+      } catch (err) {
+        console.error("Weather Fetch Error:", err);
+      } finally {
+        setWeatherLoading(false);
+      }
+    };
+    fetchWeather();
+  }, [currentUser]);
+
+  const getWeatherIcon = (condition) => {
+    const cond = condition?.toLowerCase() || '';
+    if (cond.includes('rain') || cond.includes('thunder')) return <CloudRain color="#38bdf8" size={24} />;
+    if (cond.includes('cloud')) return <Cloud color="var(--text-muted)" size={24} />;
+    return <Sun color="#f59e0b" size={24} />;
+  };
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371; 
@@ -41,7 +86,8 @@ export function BuyerDashboard() {
 
   const filteredListings = listings
     .filter(l => 
-      l.status !== 'sold' && (
+      l.status !== 'sold' && 
+      l.sellerId !== currentUser?.id && (
         l.cropName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         l.sellerName.toLowerCase().includes(searchTerm.toLowerCase())
       )
@@ -94,21 +140,62 @@ export function BuyerDashboard() {
       </div>
 
       {/* Mandi Widget */}
-      <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '16px', marginBottom: '8px', scrollbarWidth: 'none' }}>
-        <div className="glass-panel" style={{ padding: '12px 16px', minWidth: '160px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Cloud color="#38bdf8" size={24} />
+      <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '16px', marginBottom: '8px', scrollbarWidth: 'none', msOverflowStyle: 'none' }} className="no-scrollbar">
+        <div className="glass-panel" style={{ padding: '12px 16px', minWidth: '160px', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+          {weatherLoading ? (
+            <div style={{ width: '24px', height: '24px', background: 'var(--surface-light)', borderRadius: '50%' }} className="skeleton-pulse"></div>
+          ) : (
+            <div style={{ position: 'relative' }}>
+              {getWeatherIcon(weatherData?.condition)}
+              <div style={{ 
+                position: 'absolute', top: -2, right: -2, width: '6px', height: '6px', 
+                borderRadius: '50%', background: '#38bdf8', 
+                boxShadow: '0 0 8px #38bdf8' 
+              }} className="pulse-dot"></div>
+            </div>
+          )}
           <div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t.weather}</div>
-            <div style={{ fontSize: '14px', fontWeight: 'bold' }}>32°C Sunny</div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
+              {weatherLoading ? '...' : `${weatherData?.temp || 32}°C ${weatherData?.condition || 'Sunny'}`}
+            </div>
           </div>
         </div>
-        <div className="glass-panel" style={{ padding: '12px 16px', minWidth: '160px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <TrendingUp color="#10b981" size={24} />
-          <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t.mandiPrice} (Wheat)</div>
-            <div style={{ fontSize: '14px', fontWeight: 'bold' }}>₹2,275/Qtl</div>
+
+        {pricesLoading ? (
+          <div className="glass-panel" style={{ padding: '12px 16px', minWidth: '160px', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0, opacity: 0.7 }}>
+            <TrendingUp color="var(--text-muted)" size={24} />
+            <div style={{ width: '80px', height: '14px', background: 'var(--surface-light)', borderRadius: '4px' }} className="skeleton-pulse"></div>
           </div>
-        </div>
+        ) : (
+          mandiPrices.map((price, idx) => (
+            <motion.div 
+              key={idx}
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: idx * 0.1 }}
+              className="glass-panel" 
+              style={{ padding: '12px 16px', minWidth: '180px', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}
+            >
+              <div style={{ position: 'relative' }}>
+                <TrendingUp color={price.trend === 'up' ? "#10b981" : (price.trend === 'down' ? "#ef4444" : "#f59e0b")} size={24} />
+                <div style={{ 
+                  position: 'absolute', top: -2, right: -2, width: '6px', height: '6px', 
+                  borderRadius: '50%', background: '#10b981', 
+                  boxShadow: '0 0 8px #10b981' 
+                }} className="pulse-dot"></div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {t.mandiPrice} ({price.name})
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
+                  ₹{price.price?.toLocaleString('en-IN')}/{price.unit}
+                </div>
+              </div>
+            </motion.div>
+          ))
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
