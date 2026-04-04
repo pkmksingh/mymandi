@@ -95,11 +95,21 @@ export const initDB = async () => {
         FOREIGN KEY ("userId") REFERENCES users("id") ON DELETE CASCADE
       );
 
-      -- Migration: Ensure status column exists for old databases
+      -- Migration: Ensure columns exist without strict uniqueness (compound ID handles uniqueness)
       ALTER TABLE listings ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'active';
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS "email" TEXT UNIQUE;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS "googleId" TEXT UNIQUE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS "email" TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS "googleId" TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS "picture" TEXT;
+      
+      -- If they were already added with UNIQUE, we need to drop the constraint to allow multi-role
+      -- Note: This is safe even if the constraint doesn't exist yet
+      DO $$ 
+      BEGIN 
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key;
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_googleId_key;
+      EXCEPTION WHEN others THEN 
+        NULL; 
+      END $$;
     `);
     console.log("✓ PostgreSQL Tables Checked");
   } catch (err) {
