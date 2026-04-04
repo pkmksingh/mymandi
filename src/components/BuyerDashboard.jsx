@@ -1,6 +1,6 @@
 import { useStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { Search, MapPin, Grid, List as ListIcon, MessageSquare, Map as MapIcon, Cloud, TrendingUp, Languages } from 'lucide-react';
+import { Search, MapPin, Grid, List as ListIcon, MessageSquare, Map as MapIcon, Cloud, CloudRain, Sun, TrendingUp, Languages } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { getOptimizedImage } from '../utils/image';
