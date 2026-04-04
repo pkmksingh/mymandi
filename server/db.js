@@ -101,12 +101,21 @@ export const initDB = async () => {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS "googleId" TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS "picture" TEXT;
       
-      -- If they were already added with UNIQUE, we need to drop the constraint to allow multi-role
-      -- Note: This is safe even if the constraint doesn't exist yet
+      -- If they were already added with UNIQUE, we need to drop them to allow multi-role
+      -- Constraint names can vary, so we check and drop common ones
       DO $$ 
       BEGIN 
+        -- Drop constraints
         ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key;
         ALTER TABLE users DROP CONSTRAINT IF EXISTS users_googleId_key;
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_unique;
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_googleId_unique;
+        
+        -- Drop indices just in case they were created as separate unique indices
+        DROP INDEX IF EXISTS users_email_key;
+        DROP INDEX IF EXISTS users_googleId_key;
+        DROP INDEX IF EXISTS users_email_unique;
+        DROP INDEX IF EXISTS users_googleId_unique;
       EXCEPTION WHEN others THEN 
         NULL; 
       END $$;
