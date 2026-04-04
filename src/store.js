@@ -6,11 +6,18 @@ export const useStore = create(
   persist(
     (set, get) => ({
       googleUser: null,
-      deviceProfiles: [], // Renamed to googleProfiles in logic but keeping name for compatibility or renaming
+      deviceProfiles: [], 
       profilesLoaded: false,
       language: 'en',
       setLanguage: (lang) => set({ language: lang }),
       currentUser: null,
+      listings: [], 
+      unreadCount: 0,
+      missedCalls: 0,
+      activeChatUser: null,
+      showInbox: false,
+      showHelp: false,
+      activeCall: null,
       isLoading: false,
 
       setGoogleUser: (user) => {
@@ -49,10 +56,6 @@ export const useStore = create(
       },
 
       // Messaging State
-      unreadCount: 0,
-      activeChatUser: null,
-      showInbox: false,
-      showHelp: false,
       startChat: (id, name, selfiePath) => set({ activeChatUser: { id, name, selfiePath }, showInbox: false, showHelp: false }),
       closeChat: () => set({ activeChatUser: null }),
       toggleInbox: () => set(state => ({ showInbox: !state.showInbox, showHelp: false, activeChatUser: null })),
@@ -60,6 +63,7 @@ export const useStore = create(
       setUnreadCount: (count) => set({ unreadCount: count }),
       incrementMissedCalls: () => set(state => ({ missedCalls: state.missedCalls + 1 })),
       resetMissedCalls: () => set({ missedCalls: 0 }),
+      
       fetchUnreadCount: async () => {
         const user = get().currentUser;
         if (!user) return;
@@ -83,7 +87,6 @@ export const useStore = create(
 
       markAsSold: async (id) => {
         const oldListings = get().listings;
-        // Optimistic update
         set(state => ({
           listings: state.listings.map(l => l.id === id ? { ...l, status: 'sold' } : l)
         }));
@@ -96,7 +99,6 @@ export const useStore = create(
           }
         } catch (err) {
           console.error(err);
-          // Rollback on error
           set({ listings: oldListings });
           alert(`Failed to mark as sold: ${err.message}`);
         }
@@ -130,11 +132,13 @@ export const useStore = create(
       },
 
       startCall: (receiverId, receiverName, receiverSelfie) => {
+        const user = get().currentUser;
+        if (!user) return;
         set({
           activeCall: {
-            callerId: get().currentUser.id,
-            callerName: get().currentUser.name,
-            callerSelfie: get().currentUser.selfiePath,
+            callerId: user.id,
+            callerName: user.name,
+            callerSelfie: user.selfiePath,
             receiverId,
             receiverName,
             receiverSelfie,

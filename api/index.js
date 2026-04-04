@@ -235,7 +235,15 @@ app.get('/api/listings', async (req, res) => {
     const { rows } = await db.query(`SELECT listings.*, users."selfiePath" as "sellerSelfie" FROM listings JOIN users ON listings."sellerId" = users.id WHERE listings.status != 'sold' ORDER BY timestamp DESC`);
     const result = await Promise.all(rows.map(async (listing) => {
       const { rows: images } = await db.query('SELECT "imagePath" FROM listing_images WHERE "listingId" = $1', [listing.id]);
-      return { ...listing, location: JSON.parse(listing.location), images: images.map(img => img.imagePath) };
+      let parsedLocation = { address: listing.location };
+      try {
+        if (listing.location.startsWith('{')) {
+          parsedLocation = JSON.parse(listing.location);
+        }
+      } catch (e) {
+        console.warn("Legacy location string detected:", listing.location);
+      }
+      return { ...listing, location: parsedLocation, images: images.map(img => img.imagePath) };
     }));
     res.json(result);
   } catch (err) { res.status(500).json({ error: 'Failed' }); }
