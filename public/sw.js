@@ -44,3 +44,48 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+// Push Notification Event
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  const data = event.data.json();
+
+  if (data.type === 'CALL') {
+    const options = {
+      body: `${data.callerName} is calling you!`,
+      icon: data.callerSelfie || '/upiqr.jpeg',
+      badge: '/favicon.svg',
+      tag: 'incoming-call',
+      renotify: true,
+      vibrate: [200, 100, 200],
+      data: { url: '/', fromId: data.from },
+      actions: [
+        { action: 'answer', title: 'Answer' },
+        { action: 'decline', title: 'Decline' }
+      ]
+    };
+
+    event.waitUntil(
+      self.registration.showNotification('Incoming Call ☎️', options)
+    );
+  }
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      if (clientList.length > 0) {
+        let client = clientList[0];
+        for (let c of clientList) {
+          if (c.focused) {
+            client = c;
+            break;
+          }
+        }
+        return client.focus();
+      }
+      return clients.openWindow('/');
+    })
+  );
+});

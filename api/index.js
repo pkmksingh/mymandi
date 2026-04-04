@@ -12,8 +12,17 @@ import db, { initDB } from '../server/db.js';
 import * as nsfwjs from 'nsfwjs';
 import sharp from 'sharp';
 import { OAuth2Client } from 'google-auth-library';
+import webpush from 'web-push';
 
-const client = new OAuth2Client(process.env.VITE_GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client(process.env.VITE_GOOGLE_CLIENT_ID);
+
+if (process.env.VITE_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    'mailto:support@merimandi.app',
+    process.env.VITE_VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
 
 // Temporarily disabling heavy AI imports for production reliability
 const getTF = async () => null;
@@ -126,6 +135,27 @@ app.post('/api/auth/google', async (req, res) => {
   } catch (err) { 
     console.error(err);
     res.status(401).json({ error: 'Google authentication failed' }); 
+  }
+});
+
+// --- PUSH NOTIFICATIONS ---
+
+app.post('/api/push/subscribe', async (req, res) => {
+  try {
+    const { userId, subscription } = req.body;
+    if (!userId || !subscription) return res.status(400).json({ error: 'Missing data' });
+    
+    await initDB();
+    await db.query(`
+      INSERT INTO push_subscriptions ("userId", subscription)
+      VALUES ($1, $2)
+      ON CONFLICT ("userId") DO UPDATE SET subscription = $2
+    `, [userId, JSON.stringify(subscription)]);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to subscribe' });
   }
 });
 
@@ -332,6 +362,26 @@ app.patch('/api/messages/read/:senderId/:receiverId', async (req, res) => {
 app.post('/api/signal', async (req, res) => {
   const { to, event, data } = req.body;
   const channel = `user-${to.split('_')[0]}`;
+  
+  // Real-time Push if it's an incoming call
+  if (event === 'incoming-call') {
+    try {
+      const { rows } = await db.query('SELECT subscription FROM push_subscriptions WHERE "userId" = $1', [to]);
+      if (rows.length > 0) {
+        const sub = JSON.parse(rows[0].subscription);
+        const payload = JSON.stringify({
+          type: 'CALL',
+          callerName: data.callerName,
+          callerSelfie: data.callerSelfie,
+          from: data.from
+        });
+        webpush.sendNotification(sub, payload).catch(e => console.error("Push Error:", e));
+      }
+    } catch (pushErr) {
+      console.error("WebPush Lookup Failed:", pushErr);
+    }
+  }
+
   await pusher.trigger(channel, event, data);
   res.json({ success: true });
 });

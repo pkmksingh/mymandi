@@ -27,6 +27,7 @@ export function CallOverlay() {
   const remoteVideoRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const connectionRef = useRef(null);
+  const ringtoneRef = useRef(null);
   
   const leaveCall = () => {
     if (connectionRef.current) {
@@ -121,6 +122,31 @@ export function CallOverlay() {
     }
     return () => clearTimeout(timeoutId);
   }, [activeCall]);
+
+  useEffect(() => {
+    if (activeCall && activeCall.status === 'ringing') {
+      const isIncoming = activeCall.receiverId === currentUser?.id;
+      const soundUrl = isIncoming 
+        ? 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3' 
+        : 'https://assets.mixkit.co/active_storage/sfx/2345/2345-preview.mp3';
+      
+      ringtoneRef.current = new Audio(soundUrl);
+      ringtoneRef.current.loop = true;
+      ringtoneRef.current.play().catch(e => console.warn("Ringtone blocked by browser autoplay policy", e));
+    } else {
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current = null;
+      }
+    }
+
+    return () => {
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current = null;
+      }
+    };
+  }, [activeCall?.status, currentUser?.id]);
 
   const optimizeAudio = (peer) => {
     try {

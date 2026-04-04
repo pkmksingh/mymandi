@@ -87,6 +87,14 @@ export const initDB = async () => {
         FOREIGN KEY ("receiverId") REFERENCES users("id") ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        "id" SERIAL PRIMARY KEY,
+        "userId" TEXT UNIQUE,
+        "subscription" JSONB NOT NULL,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("userId") REFERENCES users("id") ON DELETE CASCADE
+      );
+
       -- Migration: Ensure status column exists for old databases
       ALTER TABLE listings ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'active';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS "email" TEXT UNIQUE;
